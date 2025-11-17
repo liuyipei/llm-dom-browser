@@ -5,7 +5,7 @@
  */
 
 const ProviderFactory = require('../providers/provider-factory');
-const { PROVIDERS, MODELS } = require('../providers/models');
+const { PROVIDERS, MODELS, OPTIONAL_API_KEY_PROVIDERS } = require('../providers/models');
 
 class LLMOrchestrator {
   constructor() {
@@ -26,13 +26,15 @@ class LLMOrchestrator {
   /**
    * Analyze content from one or more tabs using LLM
    */
-  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false) {
+  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
     try {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid query');
       }
 
-      if (!apiKey || typeof apiKey !== 'string') {
+      // API key is optional for local providers (Ollama, vLLM, LM Studio)
+      const isLocalProvider = OPTIONAL_API_KEY_PROVIDERS.includes(provider);
+      if (!isLocalProvider && (!apiKey || typeof apiKey !== 'string')) {
         throw new Error('API key is required');
       }
 
@@ -53,8 +55,8 @@ class LLMOrchestrator {
       // Track latency
       const startTime = Date.now();
 
-      // Send to remote LLM API
-      const llmResult = await this._queryRemoteLLM(prompt, apiKey, provider, model, includeMedia);
+      // Send to LLM API (local or remote)
+      const llmResult = await this._queryRemoteLLM(prompt, apiKey, provider, model, includeMedia, customEndpoint);
 
       const latencyMs = Date.now() - startTime;
 
@@ -296,15 +298,22 @@ Focus on information found in the provided content when possible.`;
   }
 
   /**
-   * Send query to remote LLM API using the selected provider
+   * Send query to LLM API (local or remote) using the selected provider
    */
-  async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null, includeMedia = false) {
+  async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
     try {
-      // Create provider instance
-      const providerInstance = ProviderFactory.createProvider(provider, {
+      // Create provider instance with optional custom endpoint
+      const config = {
         apiKey,
         model
-      });
+      };
+
+      // Add custom endpoint if provided
+      if (customEndpoint) {
+        config.baseUrl = customEndpoint;
+      }
+
+      const providerInstance = ProviderFactory.createProvider(provider, config);
 
       this.currentProvider = providerInstance;
 

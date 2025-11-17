@@ -13,7 +13,10 @@ const PROVIDERS = {
   DEEPSEEK: 'deepseek',
   KIMI: 'kimi',
   MINIMAX: 'minimax',
-  GLM: 'glm'
+  GLM: 'glm',
+  OLLAMA: 'ollama',
+  VLLM: 'vllm',
+  LMSTUDIO: 'lmstudio'
 };
 
 const MODELS = {
@@ -274,6 +277,70 @@ const MODELS = {
       maxTokens: 8192,
       contextWindow: 131072
     }
+  },
+
+  // Ollama Models (Locally Hosted)
+  [PROVIDERS.OLLAMA]: {
+    'llama3.2': {
+      name: 'Llama 3.2',
+      maxTokens: 4096,
+      contextWindow: 131072,
+      description: 'Meta\'s Llama 3.2 model'
+    },
+    'llama3.1': {
+      name: 'Llama 3.1',
+      maxTokens: 4096,
+      contextWindow: 131072,
+      description: 'Meta\'s Llama 3.1 model'
+    },
+    'mistral': {
+      name: 'Mistral',
+      maxTokens: 4096,
+      contextWindow: 32768,
+      description: 'Mistral 7B model'
+    },
+    'mixtral': {
+      name: 'Mixtral',
+      maxTokens: 4096,
+      contextWindow: 32768,
+      description: 'Mixtral 8x7B MoE model'
+    },
+    'qwen2.5': {
+      name: 'Qwen 2.5',
+      maxTokens: 4096,
+      contextWindow: 131072,
+      description: 'Alibaba\'s Qwen 2.5 model'
+    },
+    'codellama': {
+      name: 'Code Llama',
+      maxTokens: 4096,
+      contextWindow: 100000,
+      description: 'Meta\'s Code Llama for coding tasks'
+    },
+    'deepseek-coder': {
+      name: 'DeepSeek Coder',
+      maxTokens: 4096,
+      contextWindow: 16384,
+      description: 'DeepSeek specialized coding model'
+    },
+    'phi3': {
+      name: 'Phi-3',
+      maxTokens: 4096,
+      contextWindow: 128000,
+      description: 'Microsoft\'s Phi-3 compact model'
+    }
+  },
+
+  // vLLM Models (Locally Hosted - OpenAI Compatible)
+  [PROVIDERS.VLLM]: {
+    // Models are dynamically loaded from the vLLM instance
+    // Default placeholder - actual models determined at runtime
+  },
+
+  // LM Studio Models (Locally Hosted - OpenAI Compatible)
+  [PROVIDERS.LMSTUDIO]: {
+    // Models are dynamically loaded from LM Studio
+    // Default placeholder - actual models determined at runtime
   }
 };
 
@@ -288,7 +355,10 @@ const DEFAULT_MODELS = {
   [PROVIDERS.MINIMAX]: 'minimax-m2',
   [PROVIDERS.GLM]: 'glm-4.6',
   [PROVIDERS.OPENROUTER]: 'anthropic/claude-sonnet-4-5',
-  [PROVIDERS.FIREWORKS]: 'accounts/fireworks/models/llama-v3p3-70b-instruct'
+  [PROVIDERS.FIREWORKS]: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+  [PROVIDERS.OLLAMA]: 'llama3.2',
+  [PROVIDERS.VLLM]: null, // Dynamically determined
+  [PROVIDERS.LMSTUDIO]: null // Dynamically determined
 };
 
 // Provider API endpoints
@@ -302,12 +372,34 @@ const PROVIDER_ENDPOINTS = {
   [PROVIDERS.MINIMAX]: 'https://api.minimax.chat/v1',
   [PROVIDERS.GLM]: 'https://open.bigmodel.cn/api/paas/v4',
   [PROVIDERS.OPENROUTER]: 'https://openrouter.ai/api/v1',
-  [PROVIDERS.FIREWORKS]: 'https://api.fireworks.ai/inference/v1'
+  [PROVIDERS.FIREWORKS]: 'https://api.fireworks.ai/inference/v1',
+  [PROVIDERS.OLLAMA]: 'http://localhost:11434',
+  [PROVIDERS.VLLM]: 'http://localhost:8000/v1',
+  [PROVIDERS.LMSTUDIO]: 'http://localhost:1234/v1'
 };
+
+// Providers that don't require API keys (local providers)
+const OPTIONAL_API_KEY_PROVIDERS = [
+  PROVIDERS.OLLAMA,
+  PROVIDERS.VLLM,
+  PROVIDERS.LMSTUDIO
+];
+
+// Providers that support custom endpoints
+const CUSTOM_ENDPOINT_PROVIDERS = [
+  PROVIDERS.OLLAMA,
+  PROVIDERS.VLLM,
+  PROVIDERS.LMSTUDIO,
+  PROVIDERS.OPENAI, // For OpenAI-compatible endpoints
+  PROVIDERS.OPENROUTER,
+  PROVIDERS.FIREWORKS
+];
 
 module.exports = {
   PROVIDERS,
   MODELS,
   DEFAULT_MODELS,
-  PROVIDER_ENDPOINTS
+  PROVIDER_ENDPOINTS,
+  OPTIONAL_API_KEY_PROVIDERS,
+  CUSTOM_ENDPOINT_PROVIDERS
 };

@@ -309,9 +309,9 @@ function createWindow() {
   });
 
   // Handle IPC: Send query to LLM with context
-  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model, includeMedia }) => {
+  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
     try {
-      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia);
+      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
     } catch (error) {
       console.error('Error querying LLM:', error);
       throw error;
@@ -337,6 +337,74 @@ function createWindow() {
       return { success: true, models };
     } catch (error) {
       console.error('Error fetching provider models:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle IPC: Check health of local provider
+  ipcMain.handle('check-provider-health', async (event, { provider, endpoint }) => {
+    try {
+      const ModelDiscovery = require('./providers/model-discovery');
+      const health = await ModelDiscovery.checkProviderHealth(provider, endpoint);
+      return { success: true, health };
+    } catch (error) {
+      console.error('Error checking provider health:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle IPC: Fetch models from local provider
+  ipcMain.handle('fetch-local-models', async (event, { provider, endpoint, apiKey }) => {
+    try {
+      const ModelDiscovery = require('./providers/model-discovery');
+      const result = await ModelDiscovery.fetchLocalProviderModels(provider, endpoint, apiKey);
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('Error fetching local models:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle IPC: Pull Ollama model
+  ipcMain.handle('ollama-pull-model', async (event, { modelName, endpoint }) => {
+    try {
+      const OllamaProvider = require('./providers/ollama-provider');
+      const ollama = new OllamaProvider({
+        baseUrl: endpoint || 'http://localhost:11434',
+        model: modelName
+      });
+
+      // Pull with progress updates
+      const result = await ollama.pullModel(modelName, (progress) => {
+        // Send progress updates to renderer
+        if (chatView && chatView.webContents) {
+          chatView.webContents.send('ollama-pull-progress', {
+            modelName,
+            progress
+          });
+        }
+      });
+
+      return { success: true, result };
+    } catch (error) {
+      console.error('Error pulling Ollama model:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle IPC: List Ollama models
+  ipcMain.handle('ollama-list-models', async (event, { endpoint }) => {
+    try {
+      const OllamaProvider = require('./providers/ollama-provider');
+      const ollama = new OllamaProvider({
+        baseUrl: endpoint || 'http://localhost:11434',
+        model: 'dummy' // Required for validation but not used for listing
+      });
+
+      const models = await ollama.listModels();
+      return { success: true, models };
+    } catch (error) {
+      console.error('Error listing Ollama models:', error);
       return { success: false, error: error.message };
     }
   });

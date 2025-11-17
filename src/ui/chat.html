@@ -490,7 +490,18 @@
           <option value="glm">GLM (4.6)</option>
           <option value="openrouter">OpenRouter</option>
           <option value="fireworks">Fireworks AI</option>
+          <optgroup label="Local Providers">
+            <option value="ollama">Ollama (Local)</option>
+            <option value="vllm">vLLM (Local)</option>
+            <option value="lmstudio">LM Studio (Local)</option>
+          </optgroup>
         </select>
+      </div>
+
+      <div class="input-row" id="endpointRow" style="display: none;">
+        <input type="text" id="endpointInput" placeholder="Endpoint URL (e.g., http://localhost:11434)" />
+        <button id="checkHealthBtn" class="button-small" title="Check connection">Check</button>
+        <span id="healthStatus"></span>
       </div>
 
       <div class="input-row">
@@ -498,6 +509,16 @@
         <select id="modelSelect">
           <option value="">Default</option>
         </select>
+        <button id="refreshModelsBtn" class="button-small" style="display: none;" title="Refresh models from local provider">Refresh</button>
+      </div>
+
+      <div id="ollamaManagement" style="display: none; margin-top: 10px; padding: 10px; border: 1px solid #444; border-radius: 4px; background: #2a2a2a;">
+        <div style="font-weight: bold; margin-bottom: 8px;">Ollama Model Management</div>
+        <div class="input-row">
+          <input type="text" id="ollamaPullInput" placeholder="Model name (e.g., llama3.2, mistral)" style="flex: 1;" />
+          <button id="ollamaPullBtn" class="button-small">Pull Model</button>
+        </div>
+        <div id="ollamaPullProgress" style="margin-top: 8px; font-size: 12px; color: #aaa;"></div>
       </div>
 
       <div class="input-row">
@@ -519,15 +540,28 @@
       // Storage constants
       const STORAGE_KEY = 'llm-dom-browser-settings';
 
+      // Local providers that don't require API keys
+      const LOCAL_PROVIDERS = ['ollama', 'vllm', 'lmstudio'];
+      const DEFAULT_ENDPOINTS = {
+        'ollama': 'http://localhost:11434',
+        'vllm': 'http://localhost:8000/v1',
+        'lmstudio': 'http://localhost:1234/v1'
+      };
+
       // Storage management
       const storage = {
         load() {
           try {
             const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : { apiKeys: {}, selectedModels: {}, fetchedModels: {} };
+            return data ? JSON.parse(data) : {
+              apiKeys: {},
+              selectedModels: {},
+              fetchedModels: {},
+              endpoints: {}
+            };
           } catch (error) {
             console.error('Error loading settings:', error);
-            return { apiKeys: {}, selectedModels: {}, fetchedModels: {} };
+            return { apiKeys: {}, selectedModels: {}, fetchedModels: {}, endpoints: {} };
           }
         },
 
@@ -574,6 +608,18 @@
           data.fetchedModels[provider] = models;
           this.save(data);
           console.log(`Saved fetched models for ${provider}:`, models);
+        },
+
+        getEndpoint(provider) {
+          const data = this.load();
+          return data.endpoints[provider] || DEFAULT_ENDPOINTS[provider] || '';
+        },
+
+        saveEndpoint(provider, endpoint) {
+          const data = this.load();
+          data.endpoints[provider] = endpoint;
+          this.save(data);
+          console.log(`Saved endpoint for ${provider}: ${endpoint}`);
         }
       };
 
@@ -600,6 +646,15 @@
       const queryInput = document.getElementById('queryInput');
       const sendBtn = document.getElementById('sendBtn');
       const statusEl = document.getElementById('status');
+      const endpointRow = document.getElementById('endpointRow');
+      const endpointInput = document.getElementById('endpointInput');
+      const checkHealthBtn = document.getElementById('checkHealthBtn');
+      const healthStatus = document.getElementById('healthStatus');
+      const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+      const ollamaManagement = document.getElementById('ollamaManagement');
+      const ollamaPullInput = document.getElementById('ollamaPullInput');
+      const ollamaPullBtn = document.getElementById('ollamaPullBtn');
+      const ollamaPullProgress = document.getElementById('ollamaPullProgress');
 
       // Provider models data
       let providersData = null;
@@ -774,26 +829,188 @@
         }
       }
 
+      /**
+       * Check health of local provider
+       */
+      async function checkProviderHealth() {
+        const provider = providerSelect.value;
+        const endpoint = endpointInput.value.trim();
+
+        if (!LOCAL_PROVIDERS.includes(provider)) {
+          return;
+        }
+
+        healthStatus.textContent = 'Checking...';
+        healthStatus.style.color = '#999';
+
+        try {
+          const result = await window.electronAPI.checkProviderHealth(provider, endpoint);
+
+          if (result.success && result.health.healthy) {
+            healthStatus.textContent = '✓ Connected';
+            healthStatus.style.color = '#4CAF50';
+          } else {
+            healthStatus.textContent = '✗ ' + (result.health.error || 'Not connected');
+            healthStatus.style.color = '#f44336';
+          }
+        } catch (error) {
+          healthStatus.textContent = '✗ Error: ' + error.message;
+          healthStatus.style.color = '#f44336';
+        }
+      }
+
+      /**
+       * Refresh models from local provider
+       */
+      async function refreshLocalModels() {
+        const provider = providerSelect.value;
+        const endpoint = endpointInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!LOCAL_PROVIDERS.includes(provider)) {
+          return;
+        }
+
+        try {
+          updateStatus(`Fetching models from ${provider}...`);
+
+          const result = await window.electronAPI.fetchLocalModels(provider, endpoint, apiKey);
+
+          if (result.success && result.models && result.models.length > 0) {
+            // Clear and populate model select
+            modelSelect.innerHTML = '<option value="">Select a model</option>';
+
+            result.models.forEach(model => {
+              const option = document.createElement('option');
+              option.value = model.id || model.name;
+              option.textContent = model.name || model.id;
+              modelSelect.appendChild(option);
+            });
+
+            // Restore previously selected model
+            const savedModel = storage.getSelectedModel(provider);
+            if (savedModel && modelSelect.querySelector(`option[value="${savedModel}"]`)) {
+              modelSelect.value = savedModel;
+            }
+
+            updateStatus(`Loaded ${result.models.length} models from ${provider}`, 'success');
+          } else if (result.success && result.models.length === 0) {
+            modelSelect.innerHTML = '<option value="">No models found</option>';
+            updateStatus(`No models found. Pull a model to get started.`, 'warning');
+          } else {
+            updateStatus(`Failed to fetch models: ${result.error || 'Service not available'}`, 'error');
+          }
+        } catch (error) {
+          updateStatus(`Error fetching models: ${error.message}`, 'error');
+        }
+      }
+
+      /**
+       * Pull Ollama model
+       */
+      async function pullOllamaModel() {
+        const modelName = ollamaPullInput.value.trim();
+        const endpoint = endpointInput.value.trim();
+
+        if (!modelName) {
+          ollamaPullProgress.textContent = 'Please enter a model name';
+          ollamaPullProgress.style.color = '#f44336';
+          return;
+        }
+
+        ollamaPullBtn.disabled = true;
+        ollamaPullProgress.textContent = `Pulling ${modelName}...`;
+        ollamaPullProgress.style.color = '#2196F3';
+
+        try {
+          // Listen for progress updates
+          window.electronAPI.onOllamaPullProgress((data) => {
+            if (data.modelName === modelName) {
+              const progress = data.progress;
+              if (progress.status) {
+                ollamaPullProgress.textContent = `${progress.status}${progress.completed ? ` (${progress.completed}/${progress.total})` : ''}`;
+              }
+            }
+          });
+
+          const result = await window.electronAPI.ollamaPullModel(modelName, endpoint);
+
+          if (result.success) {
+            ollamaPullProgress.textContent = `✓ Successfully pulled ${modelName}`;
+            ollamaPullProgress.style.color = '#4CAF50';
+            ollamaPullInput.value = '';
+
+            // Refresh models list
+            await refreshLocalModels();
+          } else {
+            ollamaPullProgress.textContent = `✗ Failed: ${result.error}`;
+            ollamaPullProgress.style.color = '#f44336';
+          }
+        } catch (error) {
+          ollamaPullProgress.textContent = `✗ Error: ${error.message}`;
+          ollamaPullProgress.style.color = '#f44336';
+        } finally {
+          ollamaPullBtn.disabled = false;
+        }
+      }
+
       // Update model select when provider changes
-      providerSelect.addEventListener('change', (e) => {
+      providerSelect.addEventListener('change', async (e) => {
         const newProvider = e.target.value;
 
         // Save API key for the PREVIOUS provider before switching
         if (state.currentProvider) {
           storage.saveApiKey(state.currentProvider, apiKeyInput.value.trim());
           console.log(`Saved API key for previous provider: ${state.currentProvider}`);
+          // Save endpoint if previous was local provider
+          if (LOCAL_PROVIDERS.includes(state.currentProvider)) {
+            storage.saveEndpoint(state.currentProvider, endpointInput.value.trim());
+          }
         }
 
         // Update current provider
         state.currentProvider = newProvider;
 
-        // Load saved API key for new provider
-        const savedApiKey = storage.getApiKey(newProvider);
-        if (savedApiKey) {
-          apiKeyInput.value = savedApiKey;
-          console.log(`Restored API key for provider: ${newProvider}`);
+        // Handle local providers
+        const isLocal = LOCAL_PROVIDERS.includes(newProvider);
+        if (isLocal) {
+          // Show endpoint configuration
+          endpointRow.style.display = 'flex';
+          refreshModelsBtn.style.display = 'inline-block';
+
+          // Load saved endpoint or use default
+          const savedEndpoint = storage.getEndpoint(newProvider);
+          endpointInput.value = savedEndpoint;
+
+          // Show Ollama management if Ollama is selected
+          ollamaManagement.style.display = (newProvider === 'ollama') ? 'block' : 'none';
+
+          // Make API key optional for local providers
+          apiKeyInput.placeholder = 'API Key (optional for local providers)';
+          apiKeyInput.value = storage.getApiKey(newProvider);
+
+          // Check health automatically
+          await checkProviderHealth();
+
+          // Fetch local models automatically
+          await refreshLocalModels();
         } else {
-          apiKeyInput.value = '';
+          // Hide local provider UI
+          endpointRow.style.display = 'none';
+          refreshModelsBtn.style.display = 'none';
+          ollamaManagement.style.display = 'none';
+
+          // Restore API key requirement
+          apiKeyInput.placeholder = 'API Key...';
+
+          // Load saved API key for new provider
+          const savedApiKey = storage.getApiKey(newProvider);
+          if (savedApiKey) {
+            apiKeyInput.value = savedApiKey;
+            console.log(`Restored API key for provider: ${newProvider}`);
+          } else {
+            apiKeyInput.value = '';
+          }
         }
 
         updateModelSelect();
@@ -1147,13 +1364,16 @@
         const model = modelSelect.value || null;
         const tabIds = Array.from(state.selectedTabs);
         const includeMedia = includeMediaCheckbox.checked;
+        const isLocal = LOCAL_PROVIDERS.includes(provider);
+        const customEndpoint = isLocal ? endpointInput.value.trim() : null;
 
         if (!query) {
           updateStatus('Please enter a question', 'error');
           return;
         }
 
-        if (!apiKey) {
+        // API key is optional for local providers
+        if (!isLocal && !apiKey) {
           updateStatus('Please enter API key', 'error');
           return;
         }
@@ -1163,15 +1383,20 @@
           return;
         }
 
-        // Save API key before using it
-        storage.saveApiKey(provider, apiKey);
+        // Save API key and endpoint if applicable
+        if (apiKey) {
+          storage.saveApiKey(provider, apiKey);
+        }
+        if (isLocal && customEndpoint) {
+          storage.saveEndpoint(provider, customEndpoint);
+        }
 
         try {
           setLoading(true);
           updateStatus(`Analyzing content with ${provider}...`);
           addMessage(`Q: ${query}`, 'user');
 
-          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia);
+          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
 
           if (result.success) {
             // Display response with stats
@@ -1316,11 +1541,26 @@
       openBtn.addEventListener('click', handleOpenTab);
       uploadBtn.addEventListener('click', handleUploadFile);
       sendBtn.addEventListener('click', handleSendQuery);
+      checkHealthBtn.addEventListener('click', checkProviderHealth);
+      refreshModelsBtn.addEventListener('click', refreshLocalModels);
+      ollamaPullBtn.addEventListener('click', pullOllamaModel);
+
+      // Save endpoint on change
+      endpointInput.addEventListener('change', () => {
+        const provider = providerSelect.value;
+        if (LOCAL_PROVIDERS.includes(provider)) {
+          storage.saveEndpoint(provider, endpointInput.value.trim());
+        }
+      });
+
       urlInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleOpenTab();
       });
       queryInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSendQuery();
+      });
+      ollamaPullInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') pullOllamaModel();
       });
 
       // Listen for tab title updates from main process

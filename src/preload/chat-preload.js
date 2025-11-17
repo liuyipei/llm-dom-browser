@@ -54,15 +54,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Send a query to the LLM with context from selected tabs
    */
-  queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false) => {
+  queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) => {
     if (typeof query !== 'string' || !query.trim()) {
       throw new Error('Invalid query');
     }
     if (!Array.isArray(tabIds)) {
       throw new Error('Tab IDs must be an array');
     }
+    // API key validation is optional for local providers
     if (typeof apiKey !== 'string') {
-      throw new Error('Invalid API key');
+      apiKey = ''; // Allow empty API key for local providers
     }
     return ipcRenderer.invoke('query-llm', {
       query: query.trim(),
@@ -70,7 +71,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       apiKey,
       provider,
       model,
-      includeMedia
+      includeMedia,
+      customEndpoint
     });
   },
 
@@ -86,6 +88,46 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   fetchProviderModels: (provider, apiKey) => {
     return ipcRenderer.invoke('fetch-provider-models', { provider, apiKey });
+  },
+
+  /**
+   * Check health of local provider (Ollama, vLLM, LM Studio)
+   */
+  checkProviderHealth: (provider, endpoint) => {
+    return ipcRenderer.invoke('check-provider-health', { provider, endpoint });
+  },
+
+  /**
+   * Fetch models from local provider
+   */
+  fetchLocalModels: (provider, endpoint, apiKey) => {
+    return ipcRenderer.invoke('fetch-local-models', { provider, endpoint, apiKey });
+  },
+
+  /**
+   * Pull Ollama model
+   */
+  ollamaPullModel: (modelName, endpoint) => {
+    return ipcRenderer.invoke('ollama-pull-model', { modelName, endpoint });
+  },
+
+  /**
+   * List Ollama models
+   */
+  ollamaListModels: (endpoint) => {
+    return ipcRenderer.invoke('ollama-list-models', { endpoint });
+  },
+
+  /**
+   * Listen for Ollama pull progress updates
+   */
+  onOllamaPullProgress: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('ollama-pull-progress', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('ollama-pull-progress', listener);
   },
 
   /**
