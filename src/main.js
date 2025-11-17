@@ -4,6 +4,10 @@ const fs = require('fs');
 const PDFService = require('./services/pdf-service');
 const LLMOrchestrator = require('./services/llm-orchestrator');
 
+// Disable overlay scrollbars to ensure classic scrollbars are always visible
+// This must be set before app.whenReady()
+app.commandLine.appendSwitch('disable-features', 'OverlayScrollbar');
+
 let mainWindow;
 let chatView; // Reference to chat UI view for sending updates
 let persistentSession; // Persistent session for localStorage
