@@ -355,58 +355,72 @@ function createWindow() {
         }
       });
 
-      // Listen for DOM ready (fires before did-finish-load)
-      contentView.webContents.on('dom-ready', () => {
+      // Listen for page finish loading (after all CSS/JS loaded)
+      contentView.webContents.on('did-finish-load', async () => {
         const title = contentView.webContents.getTitle();
-        console.log(`Tab ${tabId} DOM ready: ${title}`);
+        console.log(`Tab ${tabId} finished loading: ${title} - injecting scrollbar CSS`);
 
-        // Inject scrollbar CSS directly from main process
-        // This bypasses CSP and sandbox restrictions
-        contentView.webContents.insertCSS(`
-          /* Force scrollbars to be visible with better styling */
-          ::-webkit-scrollbar {
-            width: 16px !important;
-            height: 16px !important;
-          }
+        try {
+          // Inject scrollbar CSS directly using executeJavaScript
+          // This ensures it's added AFTER all page CSS and has highest priority
+          await contentView.webContents.executeJavaScript(`
+            (function() {
+              // Remove any existing injected style
+              const existingStyle = document.getElementById('llm-browser-scrollbar-style');
+              if (existingStyle) existingStyle.remove();
 
-          ::-webkit-scrollbar-track {
-            background: #e0e0e0 !important;
-            border-left: 2px solid #ccc !important;
-          }
+              // Create and inject new style element
+              const style = document.createElement('style');
+              style.id = 'llm-browser-scrollbar-style';
+              style.textContent = \`
+                /* Force scrollbars to be visible with better styling */
+                ::-webkit-scrollbar {
+                  width: 16px !important;
+                  height: 16px !important;
+                }
 
-          ::-webkit-scrollbar-thumb {
-            background: #666 !important;
-            border: 4px solid #e0e0e0 !important;
-            min-height: 40px !important;
-          }
+                ::-webkit-scrollbar-track {
+                  background: #e0e0e0 !important;
+                  border-left: 2px solid #ccc !important;
+                }
 
-          ::-webkit-scrollbar-thumb:hover {
-            background: #444 !important;
-          }
+                ::-webkit-scrollbar-thumb {
+                  background: #666 !important;
+                  border: 4px solid #e0e0e0 !important;
+                  min-height: 40px !important;
+                }
 
-          ::-webkit-scrollbar-corner {
-            background: #e0e0e0 !important;
-          }
+                ::-webkit-scrollbar-thumb:hover {
+                  background: #444 !important;
+                }
 
-          /* Force scrollbar to always show */
-          html {
-            overflow-y: scroll !important;
-            overflow-x: auto !important;
-          }
+                ::-webkit-scrollbar-corner {
+                  background: #e0e0e0 !important;
+                }
 
-          body {
-            overflow: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            min-height: 100vh !important;
-          }
+                /* Force scrollbar to always show */
+                html {
+                  overflow-y: scroll !important;
+                  overflow-x: auto !important;
+                }
 
-          * {
-            scrollbar-width: auto !important;
-          }
-        `).catch(err => {
-          console.error('Failed to inject scrollbar CSS:', err);
-        });
+                body {
+                  overflow: auto !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  min-height: 100vh !important;
+                }
+              \`;
+
+              document.head.appendChild(style);
+              console.log('✓ Scrollbar CSS injected successfully');
+              return true;
+            })();
+          `);
+          console.log(`Tab ${tabId}: CSS injection completed`);
+        } catch (err) {
+          console.error(`Tab ${tabId}: Failed to inject scrollbar CSS:`, err);
+        }
       });
 
       // Load the URL or PDF
