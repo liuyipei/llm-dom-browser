@@ -319,16 +319,17 @@
         load() {
           try {
             const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : { apiKeys: {}, selectedModels: {} };
+            return data ? JSON.parse(data) : { apiKeys: {}, selectedModels: {}, fetchedModels: {} };
           } catch (error) {
             console.error('Error loading settings:', error);
-            return { apiKeys: {}, selectedModels: {} };
+            return { apiKeys: {}, selectedModels: {}, fetchedModels: {} };
           }
         },
 
         save(data) {
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            console.log('Settings saved to localStorage:', data);
           } catch (error) {
             console.error('Error saving settings:', error);
           }
@@ -343,6 +344,7 @@
           const data = this.load();
           data.apiKeys[provider] = apiKey;
           this.save(data);
+          console.log(`Saved API key for provider: ${provider}`);
         },
 
         getSelectedModel(provider) {
@@ -354,6 +356,19 @@
           const data = this.load();
           data.selectedModels[provider] = model;
           this.save(data);
+          console.log(`Saved selected model for ${provider}: ${model}`);
+        },
+
+        getFetchedModels(provider) {
+          const data = this.load();
+          return data.fetchedModels[provider] || null;
+        },
+
+        saveFetchedModels(provider, models) {
+          const data = this.load();
+          data.fetchedModels[provider] = models;
+          this.save(data);
+          console.log(`Saved fetched models for ${provider}:`, models);
         }
       };
 
@@ -362,7 +377,8 @@
         activeTabs: new Map(),
         selectedTabs: new Set(),
         activeTabId: null, // Currently visible tab
-        isLoading: false
+        isLoading: false,
+        currentProvider: null // Track current provider for saving API key when switching
       };
 
       // DOM Elements
@@ -403,32 +419,114 @@
         if (!providersData) return;
 
         const provider = providerSelect.value;
-        const models = providersData.models[provider] || {};
 
-        // Clear existing options
-        modelSelect.innerHTML = '<option value="">Default</option>';
+        // Check if we have previously fetched models for this provider
+        const fetchedModels = storage.getFetchedModels(provider);
 
-        // Add models for selected provider
-        Object.entries(models).forEach(([modelId, modelInfo]) => {
-          const option = document.createElement('option');
-          option.value = modelId;
-          option.textContent = modelInfo.name || modelId;
-          modelSelect.appendChild(option);
-        });
+        if (fetchedModels) {
+          // Use fetched models from localStorage
+          console.log(`Restoring fetched models for ${provider} from localStorage`);
+          populateFetchedModels(fetchedModels);
+        } else {
+          // Use default models from providersData
+          const models = providersData.models[provider] || {};
 
-        // For OpenRouter and Fireworks, show option to fetch latest models
-        if (provider === 'openrouter' || provider === 'fireworks') {
-          const fetchOption = document.createElement('option');
-          fetchOption.value = '__fetch__';
-          fetchOption.textContent = '🔄 Fetch Latest Models...';
-          fetchOption.style.fontWeight = 'bold';
-          modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
+          // Clear existing options
+          modelSelect.innerHTML = '<option value="">Default</option>';
+
+          // Add models for selected provider
+          Object.entries(models).forEach(([modelId, modelInfo]) => {
+            const option = document.createElement('option');
+            option.value = modelId;
+            option.textContent = modelInfo.name || modelId;
+            modelSelect.appendChild(option);
+          });
+
+          // For OpenRouter and Fireworks, show option to fetch latest models
+          if (provider === 'openrouter' || provider === 'fireworks') {
+            const fetchOption = document.createElement('option');
+            fetchOption.value = '__fetch__';
+            fetchOption.textContent = '🔄 Fetch Latest Models...';
+            fetchOption.style.fontWeight = 'bold';
+            modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
+          }
         }
 
         // Restore previously selected model for this provider
         const savedModel = storage.getSelectedModel(provider);
         if (savedModel && modelSelect.querySelector(`option[value="${savedModel}"]`)) {
           modelSelect.value = savedModel;
+        }
+      }
+
+      /**
+       * Populate model select with fetched models
+       */
+      function populateFetchedModels(models) {
+        // Clear and repopulate dropdown
+        modelSelect.innerHTML = '<option value="">Default (Recommended)</option>';
+
+        // Add flagship models section
+        if (models.flagship && models.flagship.length > 0) {
+          const flagshipGroup = document.createElement('optgroup');
+          flagshipGroup.label = '⭐ Flagship Models';
+          models.flagship.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+            flagshipGroup.appendChild(option);
+          });
+          modelSelect.appendChild(flagshipGroup);
+        }
+
+        // Add reasoning models section
+        if (models.reasoning && models.reasoning.length > 0) {
+          const reasoningGroup = document.createElement('optgroup');
+          reasoningGroup.label = '🧠 Reasoning Models';
+          models.reasoning.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+            reasoningGroup.appendChild(option);
+          });
+          modelSelect.appendChild(reasoningGroup);
+        }
+
+        // Add coding models section
+        if (models.coding && models.coding.length > 0) {
+          const codingGroup = document.createElement('optgroup');
+          codingGroup.label = '💻 Coding Models';
+          models.coding.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+            codingGroup.appendChild(option);
+          });
+          modelSelect.appendChild(codingGroup);
+        }
+
+        // Add all models section
+        if (models.all && models.all.length > 0) {
+          const allGroup = document.createElement('optgroup');
+          allGroup.label = '📋 All Available Models';
+          models.all.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            const contextSize = model.context_length ? ` (${Math.floor(model.context_length / 1000)}K)` : '';
+            option.textContent = `${model.name}${contextSize}`;
+            allGroup.appendChild(option);
+          });
+          modelSelect.appendChild(allGroup);
+        }
+
+        // Add fetch option at the beginning
+        const provider = providerSelect.value;
+        if (provider === 'openrouter' || provider === 'fireworks') {
+          const fetchOption = document.createElement('option');
+          fetchOption.value = '__fetch__';
+          fetchOption.textContent = '🔄 Refresh Models...';
+          fetchOption.style.fontWeight = 'bold';
+          modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
         }
       }
 
@@ -448,66 +546,19 @@
           return;
         }
 
+        // Save API key before using it
+        storage.saveApiKey(provider, apiKey);
+
         try {
           updateStatus(`Fetching latest models from ${provider}...`);
           const result = await window.electronAPI.fetchProviderModels(provider, apiKey);
 
           if (result.success && result.models) {
-            // Clear and repopulate dropdown
-            modelSelect.innerHTML = '<option value="">Default (Recommended)</option>';
+            // Save fetched models to localStorage
+            storage.saveFetchedModels(provider, result.models);
 
-            // Add flagship models section
-            if (result.models.flagship && result.models.flagship.length > 0) {
-              const flagshipGroup = document.createElement('optgroup');
-              flagshipGroup.label = '⭐ Flagship Models';
-              result.models.flagship.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
-                flagshipGroup.appendChild(option);
-              });
-              modelSelect.appendChild(flagshipGroup);
-            }
-
-            // Add reasoning models section
-            if (result.models.reasoning && result.models.reasoning.length > 0) {
-              const reasoningGroup = document.createElement('optgroup');
-              reasoningGroup.label = '🧠 Reasoning Models';
-              result.models.reasoning.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
-                reasoningGroup.appendChild(option);
-              });
-              modelSelect.appendChild(reasoningGroup);
-            }
-
-            // Add coding models section
-            if (result.models.coding && result.models.coding.length > 0) {
-              const codingGroup = document.createElement('optgroup');
-              codingGroup.label = '💻 Coding Models';
-              result.models.coding.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
-                codingGroup.appendChild(option);
-              });
-              modelSelect.appendChild(codingGroup);
-            }
-
-            // Add all models section
-            if (result.models.all && result.models.all.length > 0) {
-              const allGroup = document.createElement('optgroup');
-              allGroup.label = '📋 All Available Models';
-              result.models.all.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                const contextSize = model.context_length ? ` (${Math.floor(model.context_length / 1000)}K)` : '';
-                option.textContent = `${model.name}${contextSize}`;
-                allGroup.appendChild(option);
-              });
-              modelSelect.appendChild(allGroup);
-            }
+            // Populate dropdown with fetched models
+            populateFetchedModels(result.models);
 
             updateStatus(`Loaded ${result.models.all.length} models from ${provider}`, 'success');
           } else {
@@ -520,9 +571,26 @@
 
       // Update model select when provider changes
       providerSelect.addEventListener('change', (e) => {
-        const provider = e.target.value;
-        // Save API key and clear model when switching providers
-        storage.saveApiKey(provider, apiKeyInput.value.trim());
+        const newProvider = e.target.value;
+
+        // Save API key for the PREVIOUS provider before switching
+        if (state.currentProvider) {
+          storage.saveApiKey(state.currentProvider, apiKeyInput.value.trim());
+          console.log(`Saved API key for previous provider: ${state.currentProvider}`);
+        }
+
+        // Update current provider
+        state.currentProvider = newProvider;
+
+        // Load saved API key for new provider
+        const savedApiKey = storage.getApiKey(newProvider);
+        if (savedApiKey) {
+          apiKeyInput.value = savedApiKey;
+          console.log(`Restored API key for provider: ${newProvider}`);
+        } else {
+          apiKeyInput.value = '';
+        }
+
         updateModelSelect();
       });
 
@@ -542,11 +610,24 @@
         }
       });
 
-      // Save API key when it changes
-      apiKeyInput.addEventListener('change', (e) => {
+      // Save API key when it changes (blur)
+      apiKeyInput.addEventListener('blur', (e) => {
         const provider = providerSelect.value;
         const apiKey = e.target.value.trim();
         storage.saveApiKey(provider, apiKey);
+      });
+
+      // Save API key on input (with debouncing)
+      let apiKeySaveTimeout;
+      apiKeyInput.addEventListener('input', (e) => {
+        const provider = providerSelect.value;
+        const apiKey = e.target.value.trim();
+
+        // Debounce saving to avoid excessive localStorage writes
+        clearTimeout(apiKeySaveTimeout);
+        apiKeySaveTimeout = setTimeout(() => {
+          storage.saveApiKey(provider, apiKey);
+        }, 500); // Save after 500ms of no typing
       });
 
       /**
@@ -669,6 +750,9 @@
           updateStatus('Please select at least one tab', 'error');
           return;
         }
+
+        // Save API key before using it
+        storage.saveApiKey(provider, apiKey);
 
         try {
           setLoading(true);
@@ -854,6 +938,17 @@
         console.error('[UI] electronAPI.onActiveTabChanged not available!');
       }
 
+      // Save all settings before window closes
+      window.addEventListener('beforeunload', () => {
+        // Save current API key
+        const provider = providerSelect.value;
+        const apiKey = apiKeyInput.value.trim();
+        if (apiKey) {
+          storage.saveApiKey(provider, apiKey);
+          console.log(`Saved API key on beforeunload for provider: ${provider}`);
+        }
+      });
+
       // Initialize
       async function initialize() {
         // Load providers
@@ -861,9 +956,12 @@
 
         // Restore stored API key for current provider
         const provider = providerSelect.value;
+        state.currentProvider = provider; // Track initial provider
+
         const savedApiKey = storage.getApiKey(provider);
         if (savedApiKey) {
           apiKeyInput.value = savedApiKey;
+          console.log(`Restored API key on init for provider: ${provider}`);
         }
 
         // The model will be restored automatically when updateModelSelect is called above

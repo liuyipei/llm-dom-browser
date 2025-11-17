@@ -444,8 +444,14 @@ app.on('before-quit', () => {
   // Destroy all content views
   contentViews.forEach((view, tabId) => {
     try {
-      mainWindow.contentView.removeChildView(view);
-      view.webContents.destroy();
+      // Check if mainWindow and its contentView still exist before cleanup
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.contentView) {
+        mainWindow.contentView.removeChildView(view);
+      }
+      // Check if view's webContents is not already destroyed
+      if (view && view.webContents && !view.webContents.isDestroyed()) {
+        view.webContents.destroy();
+      }
     } catch (err) {
       console.error(`Error cleaning up view ${tabId}:`, err);
     }
