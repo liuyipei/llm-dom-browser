@@ -2,9 +2,10 @@
  * Model Discovery Service
  * Dynamically fetches available models from providers that support it
  * Prioritizes latest and largest models
+ * Includes health checking for local providers
  */
 
-const { PROVIDER_ENDPOINTS } = require('./models');
+const { PROVIDER_ENDPOINTS, PROVIDERS } = require('./models');
 
 class ModelDiscovery {
   /**
@@ -204,6 +205,225 @@ class ModelDiscovery {
     const context = model.context_length ? ` (${Math.floor(model.context_length / 1000)}K)` : '';
 
     return `${name}${context}`;
+  }
+
+  /**
+   * Fetch available models from Ollama
+   * @param {string} endpoint - Ollama endpoint URL
+   * @returns {Promise<Array>} - Array of model objects
+   */
+  static async fetchOllamaModels(endpoint = 'http://localhost:11434') {
+    try {
+      const response = await fetch(`${endpoint}/api/tags`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Ollama models: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return (data.models || []).map(model => ({
+        id: model.name,
+        name: model.name,
+        size: model.size,
+        modified_at: model.modified_at,
+        digest: model.digest,
+        details: model.details
+      }));
+    } catch (error) {
+      console.error('Error fetching Ollama models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch available models from vLLM
+   * @param {string} endpoint - vLLM endpoint URL
+   * @param {string} apiKey - Optional API key
+   * @returns {Promise<Array>} - Array of model objects
+   */
+  static async fetchVLLMModels(endpoint = 'http://localhost:8000/v1', apiKey = 'dummy-key') {
+    try {
+      const response = await fetch(`${endpoint}/models`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch vLLM models: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return (data.data || []).map(model => ({
+        id: model.id,
+        name: model.id,
+        created: model.created,
+        owned_by: model.owned_by
+      }));
+    } catch (error) {
+      console.error('Error fetching vLLM models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch available models from LM Studio
+   * @param {string} endpoint - LM Studio endpoint URL
+   * @param {string} apiKey - Optional API key
+   * @returns {Promise<Array>} - Array of model objects
+   */
+  static async fetchLMStudioModels(endpoint = 'http://localhost:1234/v1', apiKey = 'lm-studio') {
+    try {
+      const response = await fetch(`${endpoint}/models`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch LM Studio models: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return (data.data || []).filter(model => {
+        // Filter out placeholder models
+        return model.id && !model.id.includes('placeholder');
+      }).map(model => ({
+        id: model.id,
+        name: model.id,
+        created: model.created
+      }));
+    } catch (error) {
+      console.error('Error fetching LM Studio models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check health of a local provider
+   * @param {string} provider - Provider name (ollama, vllm, lmstudio)
+   * @param {string} endpoint - Optional custom endpoint
+   * @returns {Promise<Object>} - Health check result
+   */
+  static async checkProviderHealth(provider, endpoint = null) {
+    const baseEndpoint = endpoint || PROVIDER_ENDPOINTS[provider];
+
+    try {
+      let url;
+      let headers = { 'Content-Type': 'application/json' };
+
+      switch (provider) {
+        case PROVIDERS.OLLAMA:
+          url = `${baseEndpoint}/api/tags`;
+          break;
+        case PROVIDERS.VLLM:
+          url = `${baseEndpoint}/models`;
+          headers['Authorization'] = 'Bearer dummy-key';
+          break;
+        case PROVIDERS.LMSTUDIO:
+          url = `${baseEndpoint}/models`;
+          headers['Authorization'] = 'Bearer lm-studio';
+          break;
+        default:
+          return {
+            healthy: false,
+            error: 'Unknown provider',
+            provider,
+            endpoint: baseEndpoint
+          };
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        return {
+          healthy: true,
+          provider,
+          endpoint: baseEndpoint,
+          status: response.status
+        };
+      } else {
+        return {
+          healthy: false,
+          provider,
+          endpoint: baseEndpoint,
+          status: response.status,
+          error: `HTTP ${response.status}: ${response.statusText}`
+        };
+      }
+    } catch (error) {
+      return {
+        healthy: false,
+        provider,
+        endpoint: baseEndpoint,
+        error: error.name === 'AbortError' ? 'Connection timeout' : error.message
+      };
+    }
+  }
+
+  /**
+   * Fetch models for local provider with health check
+   * @param {string} provider - Provider name
+   * @param {string} endpoint - Optional custom endpoint
+   * @param {string} apiKey - Optional API key
+   * @returns {Promise<Object>} - Models and health status
+   */
+  static async fetchLocalProviderModels(provider, endpoint = null, apiKey = null) {
+    const baseEndpoint = endpoint || PROVIDER_ENDPOINTS[provider];
+
+    // First check health
+    const health = await this.checkProviderHealth(provider, baseEndpoint);
+
+    if (!health.healthy) {
+      return {
+        models: [],
+        health,
+        error: health.error
+      };
+    }
+
+    // Fetch models based on provider type
+    let models = [];
+    try {
+      switch (provider) {
+        case PROVIDERS.OLLAMA:
+          models = await this.fetchOllamaModels(baseEndpoint);
+          break;
+        case PROVIDERS.VLLM:
+          models = await this.fetchVLLMModels(baseEndpoint, apiKey || 'dummy-key');
+          break;
+        case PROVIDERS.LMSTUDIO:
+          models = await this.fetchLMStudioModels(baseEndpoint, apiKey || 'lm-studio');
+          break;
+      }
+    } catch (error) {
+      console.error(`Error fetching ${provider} models:`, error);
+    }
+
+    return {
+      models,
+      health,
+      provider,
+      endpoint: baseEndpoint
+    };
   }
 }
 

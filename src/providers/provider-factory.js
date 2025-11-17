@@ -15,6 +15,9 @@ const DeepSeekProvider = require('./deepseek-provider');
 const KimiProvider = require('./kimi-provider');
 const MiniMaxProvider = require('./minimax-provider');
 const GLMProvider = require('./glm-provider');
+const OllamaProvider = require('./ollama-provider');
+const VLLMProvider = require('./vllm-provider');
+const LMStudioProvider = require('./lmstudio-provider');
 
 class ProviderFactory {
   /**
@@ -59,6 +62,15 @@ class ProviderFactory {
 
       case PROVIDERS.GLM:
         return new GLMProvider(config);
+
+      case PROVIDERS.OLLAMA:
+        return new OllamaProvider(config);
+
+      case PROVIDERS.VLLM:
+        return new VLLMProvider(config);
+
+      case PROVIDERS.LMSTUDIO:
+        return new LMStudioProvider(config);
 
       default:
         throw new Error(`Unknown provider: ${providerName}. Supported providers: ${Object.values(PROVIDERS).join(', ')}`);
