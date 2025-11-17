@@ -644,6 +644,20 @@
         if (e.key === 'Enter') handleSendQuery();
       });
 
+      // Listen for tab title updates from main process
+      if (window.electronAPI && window.electronAPI.onTabTitleUpdated) {
+        window.electronAPI.onTabTitleUpdated((data) => {
+          const { tabId, title } = data;
+          const tab = state.activeTabs.get(tabId);
+          if (tab) {
+            tab.title = title;
+            state.activeTabs.set(tabId, tab);
+            renderTabs();
+            console.log(`Updated tab ${tabId} title to: ${title}`);
+          }
+        });
+      }
+
       // Initialize
       loadProviders();
       updateStatus('Ready', 'success');

@@ -5,6 +5,7 @@ const PDFService = require('./services/pdf-service');
 const LLMOrchestrator = require('./services/llm-orchestrator');
 
 let mainWindow;
+let chatView; // Reference to chat UI view for sending updates
 const contentViews = new Map();
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
@@ -28,7 +29,7 @@ function createWindow() {
   });
 
   // Create chat UI view (left sidebar)
-  const chatView = new WebContentsView({
+  chatView = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -70,6 +71,27 @@ function createWindow() {
 
       const tabId = generateId();
       contentViews.set(tabId, contentView);
+
+      // Listen for page load completion to update title
+      contentView.webContents.on('did-finish-load', () => {
+        const title = contentView.webContents.getTitle();
+        console.log(`Tab ${tabId} finished loading: ${title}`);
+
+        // Send title update to chat UI
+        if (chatView && chatView.webContents) {
+          chatView.webContents.send('tab-title-updated', { tabId, title });
+        }
+      });
+
+      // Also listen for explicit title updates (some sites update title after load)
+      contentView.webContents.on('page-title-updated', (event, title) => {
+        console.log(`Tab ${tabId} title updated: ${title}`);
+
+        // Send title update to chat UI
+        if (chatView && chatView.webContents) {
+          chatView.webContents.send('tab-title-updated', { tabId, title });
+        }
+      });
 
       // Load the URL or PDF
       await contentView.webContents.loadURL(url);

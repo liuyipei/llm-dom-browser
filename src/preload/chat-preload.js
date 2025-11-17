@@ -106,6 +106,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Listen for tab title updates
+   */
+  onTabTitleUpdated: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('tab-title-updated', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('tab-title-updated', listener);
+  },
+
+  /**
    * Get app version and info
    */
   getAppInfo: () => {
