@@ -1,98 +1,54 @@
 /**
  * MiniMax provider implementation
  * Supports MiniMax M2 and other MiniMax models
- * Uses Anthropic-compatible API
+ * Uses OpenAI-compatible API (also supports Anthropic format)
  */
 
-const BaseProvider = require('./base-provider');
+const OpenAICompatibleProvider = require('./openai-compatible-provider');
 const { PROVIDER_ENDPOINTS } = require('./models');
 
-class MiniMaxProvider extends BaseProvider {
+class MiniMaxProvider extends OpenAICompatibleProvider {
   constructor(config = {}) {
     super({
       ...config,
-      baseUrl: config.baseUrl || PROVIDER_ENDPOINTS.minimax
+      baseUrl: config.baseUrl || PROVIDER_ENDPOINTS.minimax,
+      providerName: 'MiniMax'
     });
-    this.validateConfig(['apiKey', 'model']);
   }
 
   /**
-   * Generate a completion using MiniMax's API (Anthropic-compatible)
-   * @param {string} prompt - The prompt to send
-   * @param {Object} options - Options like temperature, maxTokens
-   * @returns {Promise<string>} - The generated response
+   * Override to handle both OpenAI and Anthropic response formats
    */
   async generateCompletion(prompt, options = {}) {
-    const url = `${this.baseUrl}/chat/completions`;
-
-    const requestBody = {
-      model: this.model,
-      messages: [
-        { role: 'user', content: prompt }
-      ],
-      temperature: options.temperature || 0.7,
-      max_tokens: options.maxTokens || 2000,
-      stream: false
-    };
-
-    const response = await this.fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorMessage = await this.formatErrorMessage(response);
-      throw new Error(`MiniMax API error: ${errorMessage}`);
+    const result = await super.generateCompletion(prompt, options);
+    // MiniMax may return Anthropic-style response, handle both formats
+    if (typeof result === 'object' && result.text) {
+      return result;
     }
-
-    const data = await response.json();
-    // Handle both OpenAI and Anthropic response formats
-    return data.choices?.[0]?.message?.content || data.content?.[0]?.text || '';
-  }
-
-  /**
-   * Generate a streaming completion
-   * @param {string} prompt - The prompt to send
-   * @param {Object} options - Options like temperature, maxTokens
-   * @returns {AsyncGenerator<string>} - Stream of text chunks
-   */
-  async *generateStreamingCompletion(prompt, options = {}) {
-    const url = `${this.baseUrl}/chat/completions`;
-
-    const requestBody = {
-      model: this.model,
-      messages: [
-        { role: 'user', content: prompt }
-      ],
-      temperature: options.temperature || 0.7,
-      max_tokens: options.maxTokens || 2000,
-      stream: true
-    };
-
-    const response = await this.fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorMessage = await this.formatErrorMessage(response);
-      throw new Error(`MiniMax API error: ${errorMessage}`);
-    }
-
-    for await (const chunk of this.streamResponse(response)) {
-      const content = chunk.choices?.[0]?.delta?.content;
-      if (content) {
-        yield content;
+    // If the text field is empty, try Anthropic format
+    if (!result.text) {
+      const url = `${this.baseUrl}/chat/completions`;
+      const requestBody = {
+        model: this.model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: options.temperature || 0.7,
+        max_tokens: options.maxTokens || 2000,
+        stream: false
+      };
+      const response = await this.fetchWithRetry(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(requestBody)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const anthropicText = data.content?.[0]?.text;
+        if (anthropicText) {
+          return { text: anthropicText, usage: {}, model: this.model };
+        }
       }
     }
+    return result;
   }
 }
 

@@ -183,13 +183,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
-   * Get app version and info
-   */
-  getAppInfo: () => {
-    return ipcRenderer.invoke('get-app-info');
-  },
-
-  /**
    * Version info for debugging
    */
   version: '1.0.0'

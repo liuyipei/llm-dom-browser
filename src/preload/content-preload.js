@@ -150,72 +150,11 @@ function getSerializedDOM(options = {}) {
 }
 
 /**
- * Get page metadata quickly (useful for tab lists)
- */
-function getPageMetadata() {
-  try {
-    return {
-      title: document.title || '',
-      url: window.location.href || '',
-      description:
-        document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
-      language: document.documentElement.lang || 'unknown'
-    };
-  } catch (error) {
-    console.error('Error getting page metadata:', error);
-    return { error: error.message };
-  }
-}
-
-/**
- * Execute a command in the page context (sandbox: limited functionality)
- * Only safe, read-only operations are allowed
- */
-function executeCommand(command, args) {
-  try {
-    switch (command) {
-      case 'get-text-by-selector':
-        const elem = document.querySelector(args.selector);
-        return elem?.textContent?.trim() || null;
-
-      case 'find-text':
-        const treeWalker = document.createTreeWalker(
-          document.body,
-          NodeFilter.SHOW_TEXT,
-          null,
-          false
-        );
-        const results = [];
-        let node;
-        while ((node = treeWalker.nextNode())) {
-          if (node.textContent.includes(args.text)) {
-            results.push(node.textContent.trim());
-          }
-        }
-        return results.slice(0, 10);
-
-      case 'get-links':
-        return Array.from(document.querySelectorAll('a'))
-          .map((a) => ({ text: a.textContent?.trim(), href: a.href }))
-          .slice(0, 20);
-
-      default:
-        throw new Error(`Unknown command: ${command}`);
-    }
-  } catch (error) {
-    console.error('Error executing command:', error);
-    return { error: error.message };
-  }
-}
-
-/**
  * Expose safe API via contextBridge
  * This is the ONLY way to safely communicate with the main process
  */
 contextBridge.exposeInMainWorld('contentAPI', {
   getSerializedDOM,
-  getPageMetadata,
-  executeCommand,
   // Version info for debugging
   version: '1.0.0'
 });
