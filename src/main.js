@@ -47,10 +47,12 @@ function updateViewBounds() {
   }
 
   // Update all content view bounds
-  // Add small buffer to dimensions to prevent edge clipping of scrollbars
+  // Add buffer to prevent scrollbar clipping:
+  // - Width: +20px to ensure 16px scrollbar is not cut off at right edge
+  // - Height: +2px to prevent bottom clipping
   contentViews.forEach((view, tabId) => {
     if (view && !view.webContents.isDestroyed()) {
-      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height + 2 });
+      view.setBounds({ x: chatWidth, y: 0, width: contentWidth + 20, height: bounds.height + 2 });
     }
   });
 }
@@ -320,9 +322,11 @@ function createWindow() {
       contentViews.set(tabId, contentView);
 
       // Set bounds based on current window size
-      // Add small buffer to height to prevent edge clipping of scrollbars
+      // Add buffer to prevent scrollbar clipping:
+      // - Width: +20px to ensure 16px scrollbar is not cut off at right edge
+      // - Height: +2px to prevent bottom clipping
       const bounds = mainWindow.getBounds();
-      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height + 2 });
+      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth + 20, height: bounds.height + 2 });
 
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
@@ -493,10 +497,12 @@ function createWindow() {
       mainWindow.contentView.addChildView(view);
 
       // Set bounds based on current window size
-      // Add small buffer to height to prevent edge clipping of scrollbars
+      // Add buffer to prevent scrollbar clipping:
+      // - Width: +20px to ensure 16px scrollbar is not cut off at right edge
+      // - Height: +2px to prevent bottom clipping
       const bounds = mainWindow.getBounds();
       const chatWidth = 400;
-      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height + 2 });
+      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth + 20, height: bounds.height + 2 });
 
       // Update active tab tracking
       activeTabId = tabId;
