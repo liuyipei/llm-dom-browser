@@ -167,34 +167,44 @@ function injectScrollbarStyles() {
   try {
     const style = document.createElement('style');
     style.textContent = `
-      /* Force scrollbars to be visible */
+      /* Force scrollbars to be visible with better styling */
       ::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
+        width: 14px;
+        height: 14px;
       }
 
       ::-webkit-scrollbar-track {
         background: #f1f1f1;
-        border-radius: 6px;
+        border-radius: 0;
+        border-left: 1px solid #ddd;
       }
 
       ::-webkit-scrollbar-thumb {
         background: #888;
-        border-radius: 6px;
+        border-radius: 0;
+        border: 3px solid #f1f1f1;
       }
 
       ::-webkit-scrollbar-thumb:hover {
         background: #555;
       }
 
-      /* Ensure scrollbar is always visible, not just on hover */
+      /* Ensure scrollbar is always visible and properly positioned */
       html {
-        overflow-y: scroll;
+        overflow-y: scroll !important;
+        overflow-x: auto !important;
         scrollbar-gutter: stable;
       }
 
       body {
-        overflow-y: auto;
+        overflow: visible !important;
+      }
+
+      /* Ensure root element takes full height */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
       }
     `;
 
