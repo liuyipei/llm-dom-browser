@@ -74,6 +74,9 @@ function createWindow() {
 
   // Show window
   windowManager.show();
+
+  // Load default homepage
+  tabManager.openTab('https://www.google.com');
 }
 
 // App event handlers
