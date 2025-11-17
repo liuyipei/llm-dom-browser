@@ -377,7 +377,8 @@
         activeTabs: new Map(),
         selectedTabs: new Set(),
         activeTabId: null, // Currently visible tab
-        isLoading: false
+        isLoading: false,
+        currentProvider: null // Track current provider for saving API key when switching
       };
 
       // DOM Elements
@@ -570,15 +571,22 @@
 
       // Update model select when provider changes
       providerSelect.addEventListener('change', (e) => {
-        const provider = e.target.value;
-        // Save API key before switching providers
-        const currentProvider = providerSelect.value;
-        storage.saveApiKey(currentProvider, apiKeyInput.value.trim());
+        const newProvider = e.target.value;
+
+        // Save API key for the PREVIOUS provider before switching
+        if (state.currentProvider) {
+          storage.saveApiKey(state.currentProvider, apiKeyInput.value.trim());
+          console.log(`Saved API key for previous provider: ${state.currentProvider}`);
+        }
+
+        // Update current provider
+        state.currentProvider = newProvider;
 
         // Load saved API key for new provider
-        const savedApiKey = storage.getApiKey(provider);
+        const savedApiKey = storage.getApiKey(newProvider);
         if (savedApiKey) {
           apiKeyInput.value = savedApiKey;
+          console.log(`Restored API key for provider: ${newProvider}`);
         } else {
           apiKeyInput.value = '';
         }
@@ -930,6 +938,17 @@
         console.error('[UI] electronAPI.onActiveTabChanged not available!');
       }
 
+      // Save all settings before window closes
+      window.addEventListener('beforeunload', () => {
+        // Save current API key
+        const provider = providerSelect.value;
+        const apiKey = apiKeyInput.value.trim();
+        if (apiKey) {
+          storage.saveApiKey(provider, apiKey);
+          console.log(`Saved API key on beforeunload for provider: ${provider}`);
+        }
+      });
+
       // Initialize
       async function initialize() {
         // Load providers
@@ -937,9 +956,12 @@
 
         // Restore stored API key for current provider
         const provider = providerSelect.value;
+        state.currentProvider = provider; // Track initial provider
+
         const savedApiKey = storage.getApiKey(provider);
         if (savedApiKey) {
           apiKeyInput.value = savedApiKey;
+          console.log(`Restored API key on init for provider: ${provider}`);
         }
 
         // The model will be restored automatically when updateModelSelect is called above
