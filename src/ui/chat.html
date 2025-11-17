@@ -275,6 +275,52 @@
     </div>
 
     <script>
+      // Storage constants
+      const STORAGE_KEY = 'llm-dom-browser-settings';
+
+      // Storage management
+      const storage = {
+        load() {
+          try {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : { apiKeys: {}, selectedModels: {} };
+          } catch (error) {
+            console.error('Error loading settings:', error);
+            return { apiKeys: {}, selectedModels: {} };
+          }
+        },
+
+        save(data) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          } catch (error) {
+            console.error('Error saving settings:', error);
+          }
+        },
+
+        getApiKey(provider) {
+          const data = this.load();
+          return data.apiKeys[provider] || '';
+        },
+
+        saveApiKey(provider, apiKey) {
+          const data = this.load();
+          data.apiKeys[provider] = apiKey;
+          this.save(data);
+        },
+
+        getSelectedModel(provider) {
+          const data = this.load();
+          return data.selectedModels[provider] || '';
+        },
+
+        saveSelectedModel(provider, model) {
+          const data = this.load();
+          data.selectedModels[provider] = model;
+          this.save(data);
+        }
+      };
+
       // UI State
       const state = {
         activeTabs: new Map(),
@@ -339,6 +385,12 @@
           fetchOption.textContent = '🔄 Fetch Latest Models...';
           fetchOption.style.fontWeight = 'bold';
           modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
+        }
+
+        // Restore previously selected model for this provider
+        const savedModel = storage.getSelectedModel(provider);
+        if (savedModel && modelSelect.querySelector(`option[value="${savedModel}"]`)) {
+          modelSelect.value = savedModel;
         }
       }
 
@@ -429,13 +481,34 @@
       }
 
       // Update model select when provider changes
-      providerSelect.addEventListener('change', updateModelSelect);
+      providerSelect.addEventListener('change', (e) => {
+        const provider = e.target.value;
+        // Save API key and clear model when switching providers
+        storage.saveApiKey(provider, apiKeyInput.value.trim());
+        updateModelSelect();
+      });
 
       // Handle model selection - fetch dynamic models if needed
       modelSelect.addEventListener('change', async (e) => {
-        if (e.target.value === '__fetch__') {
+        const provider = providerSelect.value;
+        const model = e.target.value;
+
+        // Save model selection when it changes (unless it's the fetch option)
+        if (model !== '__fetch__') {
+          storage.saveSelectedModel(provider, model);
+        }
+
+        // Fetch dynamic models if requested
+        if (model === '__fetch__') {
           await fetchDynamicModels();
         }
+      });
+
+      // Save API key when it changes
+      apiKeyInput.addEventListener('change', (e) => {
+        const provider = providerSelect.value;
+        const apiKey = e.target.value.trim();
+        storage.saveApiKey(provider, apiKey);
       });
 
       /**
@@ -659,9 +732,24 @@
       }
 
       // Initialize
-      loadProviders();
-      updateStatus('Ready', 'success');
-      addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
+      async function initialize() {
+        // Load providers
+        await loadProviders();
+
+        // Restore stored API key for current provider
+        const provider = providerSelect.value;
+        const savedApiKey = storage.getApiKey(provider);
+        if (savedApiKey) {
+          apiKeyInput.value = savedApiKey;
+        }
+
+        // The model will be restored automatically when updateModelSelect is called above
+
+        updateStatus('Ready', 'success');
+        addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
+      }
+
+      initialize();
     </script>
   </body>
 </html>
