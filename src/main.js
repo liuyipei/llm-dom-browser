@@ -54,12 +54,205 @@ function updateViewBounds() {
 }
 
 /**
+ * Create custom application menu
+ */
+function createApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // App menu (macOS only)
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    // File menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => {
+            // Focus URL input in chat view
+            if (chatView && chatView.webContents) {
+              chatView.webContents.executeJavaScript(`
+                document.getElementById('urlInput')?.focus();
+              `);
+            }
+          }
+        },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            // Close active tab
+            if (activeTabId) {
+              const view = contentViews.get(activeTabId);
+              if (view) {
+                mainWindow.contentView.removeChildView(view);
+                view.webContents.destroy();
+                contentViews.delete(activeTabId);
+
+                const remainingTabs = Array.from(contentViews.keys());
+                if (remainingTabs.length > 0) {
+                  activeTabId = remainingTabs[0];
+                  if (chatView && chatView.webContents) {
+                    chatView.webContents.send('active-tab-changed', { tabId: activeTabId });
+                  }
+                } else {
+                  activeTabId = null;
+                }
+              }
+            }
+          }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    // Edit menu
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+          { type: 'separator' },
+          {
+            label: 'Speech',
+            submenu: [
+              { role: 'startSpeaking' },
+              { role: 'stopSpeaking' }
+            ]
+          }
+        ] : [
+          { role: 'delete' },
+          { type: 'separator' },
+          { role: 'selectAll' }
+        ])
+      ]
+    },
+    // View menu
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Chat DevTools',
+          accelerator: 'F12',
+          click: () => {
+            if (chatView && chatView.webContents) {
+              if (chatView.webContents.isDevToolsOpened()) {
+                chatView.webContents.closeDevTools();
+              } else {
+                chatView.webContents.openDevTools({ mode: 'detach' });
+              }
+            }
+          }
+        },
+        {
+          label: 'Toggle Content DevTools',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: () => {
+            if (activeTabId) {
+              const view = contentViews.get(activeTabId);
+              if (view && view.webContents) {
+                if (view.webContents.isDevToolsOpened()) {
+                  view.webContents.closeDevTools();
+                } else {
+                  view.webContents.openDevTools({ mode: 'detach' });
+                }
+              }
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Reload Chat UI',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            if (chatView && chatView.webContents) {
+              chatView.webContents.reload();
+            }
+          }
+        },
+        {
+          label: 'Reload Content Tab',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            if (activeTabId) {
+              const view = contentViews.get(activeTabId);
+              if (view && view.webContents) {
+                view.webContents.reload();
+              }
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    // Window menu
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' }
+        ] : [
+          { role: 'close' }
+        ])
+      ]
+    },
+    // Help menu
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://github.com/liuyipei/llm-dom-browser');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+/**
  * Create and return the main application window with WebContentsView architecture
  */
 function createWindow() {
-  // Disable the default menu to prevent DevTools toggle error
-  // (BaseWindow doesn't have webContents property like BrowserWindow)
-  Menu.setApplicationMenu(null);
+  // Create custom application menu
+  createApplicationMenu();
 
   // Main window using BaseWindow (not BrowserWindow)
   mainWindow = new BaseWindow({
@@ -455,51 +648,6 @@ function createWindow() {
     }
   });
 
-  // Add keyboard shortcut for DevTools (F12 or Cmd/Ctrl+Shift+I)
-  mainWindow.on('system-context-menu', (event) => {
-    event.preventDefault();
-  });
-
-  // Listen for keyboard shortcuts to open DevTools
-  // We'll use a simple global shortcut for now
-  const { globalShortcut } = require('electron');
-
-  // Register F12 for DevTools
-  globalShortcut.register('F12', () => {
-    if (chatView && chatView.webContents) {
-      if (chatView.webContents.isDevToolsOpened()) {
-        chatView.webContents.closeDevTools();
-      } else {
-        chatView.webContents.openDevTools({ mode: 'detach' });
-      }
-    }
-  });
-
-  // Register Cmd/Ctrl+Shift+I for DevTools
-  globalShortcut.register('CommandOrControl+Shift+I', () => {
-    if (chatView && chatView.webContents) {
-      if (chatView.webContents.isDevToolsOpened()) {
-        chatView.webContents.closeDevTools();
-      } else {
-        chatView.webContents.openDevTools({ mode: 'detach' });
-      }
-    }
-  });
-
-  // Register Cmd/Ctrl+Shift+C for content view DevTools
-  globalShortcut.register('CommandOrControl+Shift+C', () => {
-    if (activeTabId) {
-      const view = contentViews.get(activeTabId);
-      if (view && view.webContents) {
-        if (view.webContents.isDevToolsOpened()) {
-          view.webContents.closeDevTools();
-        } else {
-          view.webContents.openDevTools({ mode: 'detach' });
-        }
-      }
-    }
-  });
-
   mainWindow.show();
 }
 
@@ -543,10 +691,6 @@ app.on('activate', () => {
 
 // Cleanup on app quit
 app.on('before-quit', () => {
-  // Unregister all global shortcuts
-  const { globalShortcut } = require('electron');
-  globalShortcut.unregisterAll();
-
   // Destroy all content views
   contentViews.forEach((view, tabId) => {
     try {
