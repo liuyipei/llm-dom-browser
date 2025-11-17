@@ -14,6 +14,7 @@ let persistentSession; // Persistent session for localStorage
 const contentViews = new Map();
 let activeTabId = null; // Track currently visible tab
 let chatWidth = 400; // Default chat sidebar width, can be adjusted by user
+const SCROLLBAR_WIDTH = 14; // Width of the scrollbar in pixels (must match CSS)
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
 
@@ -50,9 +51,10 @@ function updateViewBounds() {
   }
 
   // Update all content view bounds
+  // Add SCROLLBAR_WIDTH to ensure the scrollbar is visible and not clipped
   contentViews.forEach((view, tabId) => {
     if (view && !view.webContents.isDestroyed()) {
-      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height });
+      view.setBounds({ x: chatWidth, y: 0, width: contentWidth + SCROLLBAR_WIDTH, height: bounds.height });
     }
   });
 }
@@ -322,8 +324,9 @@ function createWindow() {
       contentViews.set(tabId, contentView);
 
       // Set bounds based on current window size
+      // Add SCROLLBAR_WIDTH to ensure the scrollbar is visible and not clipped
       const bounds = mainWindow.getBounds();
-      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth + SCROLLBAR_WIDTH, height: bounds.height });
 
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
@@ -432,9 +435,9 @@ function createWindow() {
       mainWindow.contentView.addChildView(view);
 
       // Set bounds based on current window size
+      // Add SCROLLBAR_WIDTH to ensure the scrollbar is visible and not clipped
       const bounds = mainWindow.getBounds();
-      const chatWidth = 400;
-      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth + SCROLLBAR_WIDTH, height: bounds.height });
 
       // Update active tab tracking
       activeTabId = tabId;
