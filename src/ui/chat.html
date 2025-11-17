@@ -298,6 +298,26 @@
         background: white;
       }
 
+      #modelSearchInput {
+        font-size: 11px;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        background: #f9f9f9;
+        transition: all 0.2s ease;
+      }
+
+      #modelSearchInput:focus {
+        outline: none;
+        border-color: #4CAF50;
+        background: white;
+        box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+      }
+
+      #modelSearchInput::placeholder {
+        color: #999;
+        font-style: italic;
+      }
+
       .input-row label {
         min-width: 70px;
         font-size: 12px;
@@ -597,9 +617,12 @@
 
       <div class="input-row">
         <label for="modelSelect">Model:</label>
-        <select id="modelSelect">
-          <option value="">Default</option>
-        </select>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <input type="text" id="modelSearchInput" placeholder="Search models..." style="display: none;" />
+          <select id="modelSelect">
+            <option value="">Default</option>
+          </select>
+        </div>
         <button id="refreshModelsBtn" class="button-small" style="display: none;" title="Refresh models from local provider">Refresh</button>
       </div>
 
@@ -721,6 +744,7 @@
       const apiKeyInput = document.getElementById('apiKeyInput');
       const providerSelect = document.getElementById('providerSelect');
       const modelSelect = document.getElementById('modelSelect');
+      const modelSearchInput = document.getElementById('modelSearchInput');
       const includeMediaCheckbox = document.getElementById('includeMediaCheckbox');
       const queryInput = document.getElementById('queryInput');
       const sendBtn = document.getElementById('sendBtn');
@@ -740,6 +764,12 @@
 
       // Provider models data
       let providersData = null;
+
+      // Model search state
+      const modelSearchState = {
+        allOptions: [], // Store all option elements for filtering
+        allOptgroups: [] // Store all optgroup elements for filtering
+      };
 
       /**
        * Menu management
@@ -849,6 +879,10 @@
         if (savedModel && modelSelect.querySelector(`option[value="${savedModel}"]`)) {
           modelSelect.value = savedModel;
         }
+
+        // Update search state and toggle search input visibility
+        updateModelSearchState();
+        toggleModelSearch();
       }
 
       /**
@@ -919,6 +953,104 @@
           fetchOption.textContent = '🔄 Refresh Models...';
           fetchOption.style.fontWeight = 'bold';
           modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
+        }
+
+        // Update search state and toggle search input visibility
+        updateModelSearchState();
+        toggleModelSearch();
+      }
+
+      /**
+       * Update model search state by storing all current options and optgroups
+       */
+      function updateModelSearchState() {
+        modelSearchState.allOptions = Array.from(modelSelect.querySelectorAll('option'));
+        modelSearchState.allOptgroups = Array.from(modelSelect.querySelectorAll('optgroup'));
+      }
+
+      /**
+       * Toggle search input visibility based on number of models
+       */
+      function toggleModelSearch() {
+        const optionCount = modelSelect.querySelectorAll('option').length;
+        // Show search if there are more than 10 options (excluding special options like Default and Fetch)
+        if (optionCount > 10) {
+          modelSearchInput.style.display = 'block';
+        } else {
+          modelSearchInput.style.display = 'none';
+          modelSearchInput.value = ''; // Clear search when hidden
+        }
+      }
+
+      /**
+       * Filter models based on search term
+       */
+      function filterModels(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+
+        if (!term) {
+          // No search term - restore all options and optgroups
+          modelSelect.innerHTML = '';
+          modelSearchState.allOptions.forEach(option => {
+            modelSelect.appendChild(option);
+          });
+          modelSearchState.allOptgroups.forEach(optgroup => {
+            modelSelect.appendChild(optgroup);
+          });
+          return;
+        }
+
+        // Clear the select
+        modelSelect.innerHTML = '';
+
+        // Filter and add matching options
+        let hasMatches = false;
+
+        // Handle options that are direct children (not in optgroups)
+        modelSearchState.allOptions.forEach(option => {
+          const text = option.textContent.toLowerCase();
+          const value = option.value.toLowerCase();
+
+          if (text.includes(term) || value.includes(term)) {
+            // Check if this option belongs to an optgroup
+            const belongsToOptgroup = modelSearchState.allOptgroups.some(og =>
+              Array.from(og.querySelectorAll('option')).includes(option)
+            );
+
+            if (!belongsToOptgroup) {
+              modelSelect.appendChild(option.cloneNode(true));
+              hasMatches = true;
+            }
+          }
+        });
+
+        // Handle optgroups
+        modelSearchState.allOptgroups.forEach(optgroup => {
+          const clonedOptgroup = optgroup.cloneNode(false); // Clone without children
+          let groupHasMatches = false;
+
+          Array.from(optgroup.querySelectorAll('option')).forEach(option => {
+            const text = option.textContent.toLowerCase();
+            const value = option.value.toLowerCase();
+
+            if (text.includes(term) || value.includes(term)) {
+              clonedOptgroup.appendChild(option.cloneNode(true));
+              groupHasMatches = true;
+              hasMatches = true;
+            }
+          });
+
+          if (groupHasMatches) {
+            modelSelect.appendChild(clonedOptgroup);
+          }
+        });
+
+        // If no matches, show a message
+        if (!hasMatches) {
+          const noMatchOption = document.createElement('option');
+          noMatchOption.disabled = true;
+          noMatchOption.textContent = 'No models match your search';
+          modelSelect.appendChild(noMatchOption);
         }
       }
 
@@ -1025,9 +1157,15 @@
               modelSelect.value = savedModel;
             }
 
+            // Update search state and toggle search input visibility
+            updateModelSearchState();
+            toggleModelSearch();
+
             updateStatus(`Loaded ${result.models.length} models from ${provider}`, 'success');
           } else if (result.success && result.models.length === 0) {
             modelSelect.innerHTML = '<option value="">No models found</option>';
+            updateModelSearchState();
+            toggleModelSearch();
             updateStatus(`No models found. Pull a model to get started.`, 'warning');
           } else {
             updateStatus(`Failed to fetch models: ${result.error || 'Service not available'}`, 'error');
@@ -1162,6 +1300,11 @@
         if (model === '__fetch__') {
           await fetchDynamicModels();
         }
+      });
+
+      // Handle model search input
+      modelSearchInput.addEventListener('input', (e) => {
+        filterModels(e.target.value);
       });
 
       // Save API key when it changes (blur)
