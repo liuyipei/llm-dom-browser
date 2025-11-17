@@ -209,7 +209,9 @@
         border: 1px solid #ddd;
         border-radius: 4px;
         font-size: 11px;
-        cursor: pointer;
+        cursor: move;
+        transition: all 0.2s ease;
+        position: relative;
       }
 
       .tab-item:hover {
@@ -241,6 +243,98 @@
       .tab-item.current.active {
         background: #3498db;
         border-color: #2980b9;
+      }
+
+      /* Pinned tab styles */
+      .tab-item.pinned {
+        background: #e8f5e9;
+        border-left: 4px solid #4caf50;
+        font-weight: 600;
+        min-width: 80px;
+        max-width: 120px;
+      }
+
+      .tab-item.pinned .tab-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Dragging styles */
+      .tab-item.dragging {
+        opacity: 0.5;
+        background: #ecf0f1;
+      }
+
+      .tab-item.drag-over {
+        border-top: 3px solid #3498db;
+      }
+
+      /* Tab group styles */
+      .tab-group-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 8px;
+        margin-top: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: #f8f9fa;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .tab-group-header:first-child {
+        margin-top: 0;
+      }
+
+      .tab-group-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+      }
+
+      .tab-item.grouped {
+        margin-left: 12px;
+        border-left: 3px solid;
+      }
+
+      /* Recently closed tabs button */
+      .recently-closed-btn {
+        margin-top: 8px;
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 11px;
+        background: #ecf0f1;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .recently-closed-btn:hover {
+        background: #bdc3c7;
+      }
+
+      /* Pin button */
+      .pin-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 2px 4px;
+        opacity: 0.6;
+        transition: opacity 0.2s ease;
+      }
+
+      .pin-btn:hover {
+        opacity: 1;
+      }
+
+      .pin-btn.pinned {
+        opacity: 1;
+        color: #4caf50;
       }
 
       .tab-item button {
@@ -702,13 +796,47 @@
         }
       };
 
+      // Tab Management Persistence
+      const tabPersistence = {
+        load() {
+          const data = localStorage.getItem('tab-management');
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              return {
+                pinnedTabs: new Set(parsed.pinnedTabs || []),
+                tabGroups: new Map(parsed.tabGroups || []),
+                closedTabs: parsed.closedTabs || []
+              };
+            } catch (e) {
+              console.error('Error loading tab management data:', e);
+            }
+          }
+          return { pinnedTabs: new Set(), tabGroups: new Map(), closedTabs: [] };
+        },
+
+        save() {
+          const data = {
+            pinnedTabs: Array.from(state.pinnedTabs),
+            tabGroups: Array.from(state.tabGroups.entries()),
+            closedTabs: state.closedTabs.slice(-20) // Keep only last 20
+          };
+          localStorage.setItem('tab-management', JSON.stringify(data));
+        }
+      };
+
       // UI State
       const state = {
         activeTabs: new Map(),
         selectedTabs: new Set(),
         activeTabId: null, // Currently visible tab
         isLoading: false,
-        currentProvider: null // Track current provider for saving API key when switching
+        currentProvider: null, // Track current provider for saving API key when switching
+        pinnedTabs: new Set(), // Set of pinned tab IDs
+        tabOrder: [], // Array of tab IDs in display order
+        tabGroups: new Map(), // Map of tabId -> {groupName, color}
+        closedTabs: [], // Array of recently closed tabs (max 20)
+        draggedTabId: null // Currently dragged tab
       };
 
       // DOM Elements
@@ -1424,26 +1552,10 @@
           setLoading(true);
           updateStatus('Opening tab...');
 
-          // Ensure URL has protocol
-          let finalUrl = url;
-          if (!url.startsWith('http') && !url.startsWith('file')) {
-            finalUrl = 'https://' + url;
-          }
-
-          const result = await window.electronAPI.openTab(finalUrl);
+          const result = await handleOpenTabUrl(url);
           console.log('[UI] Tab opened, result:', result);
-
-          // Use the title from the result if available, otherwise default to 'Loading...'
-          const initialTitle = result.title || 'Loading...';
-          state.activeTabs.set(result.id, { url: result.url, title: initialTitle });
-
-          // Set as active tab if it's the first tab
-          if (result.isActive) {
-            state.activeTabId = result.id;
-          }
-
           console.log('[UI] Active tabs after opening:', Array.from(state.activeTabs.entries()));
-          addMessage(`✅ Opened: ${finalUrl}`, 'system');
+          addMessage(`✅ Opened: ${result.url}`, 'system');
           updateStatus('Tab opened successfully', 'success');
           urlInput.value = '';
           renderTabs();
@@ -1561,9 +1673,29 @@
        */
       async function closeTab(tabId) {
         try {
+          // Save tab info before closing
+          const tab = state.activeTabs.get(tabId);
+          if (tab) {
+            const closedTabInfo = {
+              url: tab.url,
+              title: tab.title,
+              pinned: state.pinnedTabs.has(tabId),
+              group: state.tabGroups.get(tabId) || null,
+              timestamp: Date.now()
+            };
+            state.closedTabs.push(closedTabInfo);
+            // Keep only last 20
+            if (state.closedTabs.length > 20) {
+              state.closedTabs.shift();
+            }
+            tabPersistence.save();
+          }
+
           await window.electronAPI.closeTab(tabId);
           state.activeTabs.delete(tabId);
           state.selectedTabs.delete(tabId);
+          state.pinnedTabs.delete(tabId);
+          state.tabGroups.delete(tabId);
           addMessage(`Closed tab`, 'system');
           renderTabs();
         } catch (error) {
@@ -1597,64 +1729,472 @@
       }
 
       /**
-       * Render tabs list
+       * Toggle pin status of a tab
        */
-      function renderTabs() {
-        tabList.innerHTML = '';
-        state.activeTabs.forEach((tab, tabId) => {
-          const isSelected = state.selectedTabs.has(tabId);
-          const isCurrent = state.activeTabId === tabId;
-          const tabEl = document.createElement('div');
+      function togglePinTab(tabId) {
+        if (state.pinnedTabs.has(tabId)) {
+          state.pinnedTabs.delete(tabId);
+        } else {
+          state.pinnedTabs.add(tabId);
+        }
+        tabPersistence.save();
+        renderTabs();
+      }
 
-          // Add classes for visual states
-          const classes = ['tab-item'];
-          if (isSelected) classes.push('active');
-          if (isCurrent) classes.push('current');
-          tabEl.className = classes.join(' ');
+      /**
+       * Prompt user to add tab to a group
+       */
+      function promptAddToGroup(tabId) {
+        const existingGroup = state.tabGroups.get(tabId);
+        const groupName = prompt(
+          'Enter group name:',
+          existingGroup ? existingGroup.groupName : ''
+        );
 
-          // Create tab content with checkbox and title
-          const title = tab.title || 'Untitled';
-          const currentIndicator = isCurrent ? '👁 ' : '';
+        if (groupName === null) return; // User cancelled
 
-          // Create checkbox
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = isSelected;
-          checkbox.style.cursor = 'pointer';
-          checkbox.title = isSelected ? 'Remove from LLM query' : 'Include in LLM query';
-          checkbox.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent triggering tab switch
-            toggleTabSelection(tabId);
-          });
+        if (groupName === '') {
+          // Remove from group
+          state.tabGroups.delete(tabId);
+        } else {
+          // Predefined colors
+          const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
 
-          // Create title span
-          const titleSpan = document.createElement('span');
-          titleSpan.textContent = `${currentIndicator}${title}`;
-
-          // Create clickable div for tab switching
-          const clickableDiv = document.createElement('div');
-          clickableDiv.className = 'clickable-area';
-          clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 2px;';
-          clickableDiv.title = isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab';
-          clickableDiv.appendChild(checkbox);
-          clickableDiv.appendChild(titleSpan);
-          clickableDiv.addEventListener('click', (e) => {
-            // Only switch tabs if not clicking the checkbox
-            if (e.target !== checkbox) {
-              switchTab(tabId);
+          // Check if group already exists
+          let groupColor = null;
+          state.tabGroups.forEach((info) => {
+            if (info.groupName === groupName) {
+              groupColor = info.color;
             }
           });
 
-          // Create close button
-          const closeBtn = document.createElement('button');
-          closeBtn.textContent = 'Close';
-          closeBtn.className = 'button-small';
-          closeBtn.addEventListener('click', () => closeTab(tabId));
+          // If new group, pick a color
+          if (!groupColor) {
+            const usedColors = new Set();
+            state.tabGroups.forEach((info) => usedColors.add(info.color));
+            groupColor = colors.find(c => !usedColors.has(c)) || colors[0];
+          }
 
-          tabEl.appendChild(clickableDiv);
-          tabEl.appendChild(closeBtn);
-          tabList.appendChild(tabEl);
+          state.tabGroups.set(tabId, { groupName, color: groupColor });
+        }
+
+        tabPersistence.save();
+        renderTabs();
+      }
+
+      /**
+       * Drag and drop handlers
+       */
+      function handleDragStart(e) {
+        const tabId = e.currentTarget.dataset.tabId;
+        state.draggedTabId = tabId;
+        e.currentTarget.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tabId);
+      }
+
+      function handleDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+        state.draggedTabId = null;
+        // Remove all drag-over classes
+        document.querySelectorAll('.tab-item').forEach(el => {
+          el.classList.remove('drag-over');
         });
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.currentTarget;
+        if (!target.classList.contains('dragging')) {
+          target.classList.add('drag-over');
+        }
+      }
+
+      function handleDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over');
+      }
+
+      function handleDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+
+        const draggedTabId = state.draggedTabId;
+        const targetTabId = e.currentTarget.dataset.tabId;
+
+        if (draggedTabId && targetTabId && draggedTabId !== targetTabId) {
+          // Reorder tabs
+          const draggedIndex = state.tabOrder.indexOf(draggedTabId);
+          const targetIndex = state.tabOrder.indexOf(targetTabId);
+
+          if (draggedIndex !== -1 && targetIndex !== -1) {
+            state.tabOrder.splice(draggedIndex, 1);
+            const newTargetIndex = state.tabOrder.indexOf(targetTabId);
+            state.tabOrder.splice(newTargetIndex, 0, draggedTabId);
+            renderTabs();
+          }
+        }
+      }
+
+      /**
+       * Show recently closed tabs menu
+       */
+      function showRecentlyClosedMenu() {
+        if (state.closedTabs.length === 0) return;
+
+        const menu = document.createElement('div');
+        menu.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          padding: 16px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          max-width: 400px;
+          max-height: 400px;
+          overflow-y: auto;
+        `;
+
+        const title = document.createElement('h3');
+        title.textContent = 'Recently Closed Tabs';
+        title.style.cssText = 'margin-bottom: 12px; font-size: 14px;';
+        menu.appendChild(title);
+
+        const list = document.createElement('div');
+        list.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+
+        // Show most recent first
+        [...state.closedTabs].reverse().forEach((closedTab, index) => {
+          const item = document.createElement('div');
+          item.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 11px;
+          `;
+
+          const info = document.createElement('span');
+          info.textContent = closedTab.title || closedTab.url;
+          info.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+
+          const restoreBtn = document.createElement('button');
+          restoreBtn.textContent = 'Restore';
+          restoreBtn.className = 'button-small';
+          restoreBtn.addEventListener('click', async () => {
+            await restoreTab(closedTab);
+            document.body.removeChild(overlay);
+          });
+
+          item.appendChild(info);
+          item.appendChild(restoreBtn);
+          list.appendChild(item);
+        });
+
+        menu.appendChild(list);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.cssText = 'margin-top: 12px; width: 100%; padding: 6px;';
+        closeBtn.addEventListener('click', () => document.body.removeChild(overlay));
+        menu.appendChild(closeBtn);
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.3);
+          z-index: 999;
+        `;
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            document.body.removeChild(overlay);
+          }
+        });
+
+        overlay.appendChild(menu);
+        document.body.appendChild(overlay);
+      }
+
+      /**
+       * Restore a recently closed tab
+       */
+      async function restoreTab(closedTab) {
+        try {
+          await handleOpenTabUrl(closedTab.url);
+
+          // Restore pinned status and group
+          if (closedTab.pinned) {
+            // Find the newly opened tab (it should be the last one)
+            const newTabId = Array.from(state.activeTabs.keys()).pop();
+            if (newTabId) {
+              state.pinnedTabs.add(newTabId);
+            }
+          }
+
+          if (closedTab.group) {
+            const newTabId = Array.from(state.activeTabs.keys()).pop();
+            if (newTabId) {
+              state.tabGroups.set(newTabId, closedTab.group);
+            }
+          }
+
+          // Remove from closed tabs
+          const index = state.closedTabs.indexOf(closedTab);
+          if (index !== -1) {
+            state.closedTabs.splice(index, 1);
+          }
+
+          tabPersistence.save();
+          renderTabs();
+        } catch (error) {
+          updateStatus(`Error restoring tab: ${error.message}`, 'error');
+        }
+      }
+
+      /**
+       * Open tab helper (extracted from handleOpenTab)
+       */
+      async function handleOpenTabUrl(url) {
+        let finalUrl = url;
+        if (!url.startsWith('http') && !url.startsWith('file')) {
+          finalUrl = 'https://' + url;
+        }
+
+        const result = await window.electronAPI.openTab(finalUrl);
+        const initialTitle = result.title || 'Loading...';
+        state.activeTabs.set(result.id, { url: result.url, title: initialTitle });
+
+        if (result.isActive) {
+          state.activeTabId = result.id;
+        }
+
+        return result;
+      }
+
+      /**
+       * Render tabs list with all features
+       */
+      function renderTabs() {
+        tabList.innerHTML = '';
+
+        // Update tab order if needed
+        if (state.tabOrder.length === 0) {
+          state.tabOrder = Array.from(state.activeTabs.keys());
+        } else {
+          // Remove closed tabs from order
+          state.tabOrder = state.tabOrder.filter(id => state.activeTabs.has(id));
+          // Add new tabs to order
+          state.activeTabs.forEach((tab, tabId) => {
+            if (!state.tabOrder.includes(tabId)) {
+              state.tabOrder.push(tabId);
+            }
+          });
+        }
+
+        // Organize tabs by groups
+        const groupedTabs = new Map();
+        const ungroupedPinnedTabs = [];
+        const ungroupedTabs = [];
+
+        state.tabOrder.forEach(tabId => {
+          if (!state.activeTabs.has(tabId)) return;
+
+          const isPinned = state.pinnedTabs.has(tabId);
+          const groupInfo = state.tabGroups.get(tabId);
+
+          if (groupInfo) {
+            if (!groupedTabs.has(groupInfo.groupName)) {
+              groupedTabs.set(groupInfo.groupName, []);
+            }
+            groupedTabs.get(groupInfo.groupName).push(tabId);
+          } else if (isPinned) {
+            ungroupedPinnedTabs.push(tabId);
+          } else {
+            ungroupedTabs.push(tabId);
+          }
+        });
+
+        // Render pinned tabs first
+        if (ungroupedPinnedTabs.length > 0) {
+          ungroupedPinnedTabs.forEach(tabId => renderTabElement(tabId, true, false, null));
+        }
+
+        // Render grouped tabs
+        groupedTabs.forEach((tabIds, groupName) => {
+          const firstTabGroup = state.tabGroups.get(tabIds[0]);
+          renderGroupHeader(groupName, firstTabGroup.color);
+          tabIds.forEach(tabId => renderTabElement(tabId, false, true, firstTabGroup.color));
+        });
+
+        // Render ungrouped tabs
+        ungroupedTabs.forEach(tabId => renderTabElement(tabId, false, false, null));
+
+        // Render recently closed tabs button
+        if (state.closedTabs.length > 0) {
+          renderRecentlyClosedButton();
+        }
+      }
+
+      /**
+       * Render a single tab element
+       */
+      function renderTabElement(tabId, isPinned, isGrouped, groupColor) {
+        const tab = state.activeTabs.get(tabId);
+        if (!tab) return;
+
+        const isSelected = state.selectedTabs.has(tabId);
+        const isCurrent = state.activeTabId === tabId;
+        const tabEl = document.createElement('div');
+
+        // Add classes for visual states
+        const classes = ['tab-item'];
+        if (isSelected) classes.push('active');
+        if (isCurrent) classes.push('current');
+        if (isPinned) classes.push('pinned');
+        if (isGrouped) classes.push('grouped');
+        tabEl.className = classes.join(' ');
+        tabEl.draggable = true;
+        tabEl.dataset.tabId = tabId;
+
+        // Apply group color if grouped
+        if (isGrouped && groupColor) {
+          tabEl.style.borderLeftColor = groupColor;
+        }
+
+        // Create checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isSelected;
+        checkbox.style.cursor = 'pointer';
+        checkbox.title = isSelected ? 'Remove from LLM query' : 'Include in LLM query';
+        checkbox.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleTabSelection(tabId);
+        });
+
+        // Create pin button
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'pin-btn' + (isPinned ? ' pinned' : '');
+        pinBtn.innerHTML = isPinned ? '📌' : '📍';
+        pinBtn.title = isPinned ? 'Unpin tab' : 'Pin tab';
+        pinBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          togglePinTab(tabId);
+        });
+
+        // Create title span
+        const title = tab.title || 'Untitled';
+        const currentIndicator = isCurrent ? '👁 ' : '';
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'tab-title';
+        titleSpan.textContent = `${currentIndicator}${title}`;
+
+        // Create clickable div for tab switching
+        const clickableDiv = document.createElement('div');
+        clickableDiv.className = 'clickable-area';
+        clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px;';
+        clickableDiv.title = isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab';
+        clickableDiv.appendChild(checkbox);
+        clickableDiv.appendChild(pinBtn);
+        clickableDiv.appendChild(titleSpan);
+        clickableDiv.addEventListener('click', (e) => {
+          if (e.target !== checkbox && e.target !== pinBtn) {
+            switchTab(tabId);
+          }
+        });
+
+        // Create buttons container
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.style.cssText = 'display: flex; gap: 4px; align-items: center;';
+
+        // Create group button
+        const groupBtn = document.createElement('button');
+        groupBtn.textContent = '🏷️';
+        groupBtn.className = 'button-small';
+        groupBtn.title = 'Add to group';
+        groupBtn.style.cssText = 'padding: 2px 6px; font-size: 12px;';
+        groupBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          promptAddToGroup(tabId);
+        });
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.className = 'button-small';
+        closeBtn.addEventListener('click', () => closeTab(tabId));
+
+        buttonsDiv.appendChild(groupBtn);
+        buttonsDiv.appendChild(closeBtn);
+
+        tabEl.appendChild(clickableDiv);
+        tabEl.appendChild(buttonsDiv);
+
+        // Add drag and drop event listeners
+        tabEl.addEventListener('dragstart', handleDragStart);
+        tabEl.addEventListener('dragend', handleDragEnd);
+        tabEl.addEventListener('dragover', handleDragOver);
+        tabEl.addEventListener('drop', handleDrop);
+        tabEl.addEventListener('dragleave', handleDragLeave);
+
+        tabList.appendChild(tabEl);
+      }
+
+      /**
+       * Render group header
+       */
+      function renderGroupHeader(groupName, color) {
+        const headerEl = document.createElement('div');
+        headerEl.className = 'tab-group-header';
+
+        const colorEl = document.createElement('div');
+        colorEl.className = 'tab-group-color';
+        colorEl.style.backgroundColor = color;
+
+        const nameEl = document.createElement('span');
+        nameEl.textContent = groupName;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; font-size: 16px; margin-left: auto; opacity: 0.6;';
+        removeBtn.title = 'Ungroup all tabs in this group';
+        removeBtn.addEventListener('click', () => {
+          // Remove all tabs from this group
+          state.tabGroups.forEach((info, tabId) => {
+            if (info.groupName === groupName) {
+              state.tabGroups.delete(tabId);
+            }
+          });
+          tabPersistence.save();
+          renderTabs();
+        });
+
+        headerEl.appendChild(colorEl);
+        headerEl.appendChild(nameEl);
+        headerEl.appendChild(removeBtn);
+        tabList.appendChild(headerEl);
+      }
+
+      /**
+       * Render recently closed tabs button
+       */
+      function renderRecentlyClosedButton() {
+        const btn = document.createElement('button');
+        btn.className = 'recently-closed-btn';
+        btn.textContent = `🕐 Recently Closed (${state.closedTabs.length})`;
+        btn.addEventListener('click', showRecentlyClosedMenu);
+        tabList.appendChild(btn);
       }
 
       /**
@@ -1801,11 +2341,23 @@
           console.log(`Restored API key on init for provider: ${provider}`);
         }
 
+        // Load persisted tab management data
+        const tabData = tabPersistence.load();
+        state.pinnedTabs = tabData.pinnedTabs;
+        state.tabGroups = tabData.tabGroups;
+        state.closedTabs = tabData.closedTabs;
+        console.log('Loaded tab management data:', {
+          pinnedTabs: Array.from(state.pinnedTabs),
+          tabGroups: Array.from(state.tabGroups.entries()),
+          closedTabs: state.closedTabs.length
+        });
+
         // The model will be restored automatically when updateModelSelect is called above
 
         updateStatus('Ready', 'success');
         addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
         addMessage('💡 Tip: Press F12 to open DevTools for the UI, Ctrl+Shift+C for the active tab', 'system');
+        addMessage('🎨 New: Pin tabs (📌), drag to reorder, group tabs (🏷️), restore closed tabs (🕐)', 'system');
       }
 
       initialize();
