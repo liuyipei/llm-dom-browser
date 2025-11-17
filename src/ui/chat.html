@@ -331,10 +331,112 @@
           option.textContent = modelInfo.name || modelId;
           modelSelect.appendChild(option);
         });
+
+        // For OpenRouter and Fireworks, show option to fetch latest models
+        if (provider === 'openrouter' || provider === 'fireworks') {
+          const fetchOption = document.createElement('option');
+          fetchOption.value = '__fetch__';
+          fetchOption.textContent = '🔄 Fetch Latest Models...';
+          fetchOption.style.fontWeight = 'bold';
+          modelSelect.insertBefore(fetchOption, modelSelect.firstChild.nextSibling);
+        }
+      }
+
+      /**
+       * Fetch models dynamically for OpenRouter/Fireworks
+       */
+      async function fetchDynamicModels() {
+        const provider = providerSelect.value;
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!apiKey) {
+          updateStatus('Please enter API key to fetch models', 'error');
+          return;
+        }
+
+        if (provider !== 'openrouter' && provider !== 'fireworks') {
+          return;
+        }
+
+        try {
+          updateStatus(`Fetching latest models from ${provider}...`);
+          const result = await window.electronAPI.fetchProviderModels(provider, apiKey);
+
+          if (result.success && result.models) {
+            // Clear and repopulate dropdown
+            modelSelect.innerHTML = '<option value="">Default (Recommended)</option>';
+
+            // Add flagship models section
+            if (result.models.flagship && result.models.flagship.length > 0) {
+              const flagshipGroup = document.createElement('optgroup');
+              flagshipGroup.label = '⭐ Flagship Models';
+              result.models.flagship.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+                flagshipGroup.appendChild(option);
+              });
+              modelSelect.appendChild(flagshipGroup);
+            }
+
+            // Add reasoning models section
+            if (result.models.reasoning && result.models.reasoning.length > 0) {
+              const reasoningGroup = document.createElement('optgroup');
+              reasoningGroup.label = '🧠 Reasoning Models';
+              result.models.reasoning.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+                reasoningGroup.appendChild(option);
+              });
+              modelSelect.appendChild(reasoningGroup);
+            }
+
+            // Add coding models section
+            if (result.models.coding && result.models.coding.length > 0) {
+              const codingGroup = document.createElement('optgroup');
+              codingGroup.label = '💻 Coding Models';
+              result.models.coding.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = `${model.name} (${Math.floor(model.context_length / 1000)}K)`;
+                codingGroup.appendChild(option);
+              });
+              modelSelect.appendChild(codingGroup);
+            }
+
+            // Add all models section
+            if (result.models.all && result.models.all.length > 0) {
+              const allGroup = document.createElement('optgroup');
+              allGroup.label = '📋 All Available Models';
+              result.models.all.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                const contextSize = model.context_length ? ` (${Math.floor(model.context_length / 1000)}K)` : '';
+                option.textContent = `${model.name}${contextSize}`;
+                allGroup.appendChild(option);
+              });
+              modelSelect.appendChild(allGroup);
+            }
+
+            updateStatus(`Loaded ${result.models.all.length} models from ${provider}`, 'success');
+          } else {
+            updateStatus(`Failed to fetch models: ${result.error || 'Unknown error'}`, 'error');
+          }
+        } catch (error) {
+          updateStatus(`Error fetching models: ${error.message}`, 'error');
+        }
       }
 
       // Update model select when provider changes
       providerSelect.addEventListener('change', updateModelSelect);
+
+      // Handle model selection - fetch dynamic models if needed
+      modelSelect.addEventListener('change', async (e) => {
+        if (e.target.value === '__fetch__') {
+          await fetchDynamicModels();
+        }
+      });
 
       /**
        * Add message to chat

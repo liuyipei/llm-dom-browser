@@ -172,6 +172,19 @@ function createWindow() {
     }
   });
 
+  // Handle IPC: Fetch models dynamically for a provider
+  ipcMain.handle('fetch-provider-models', async (event, { provider, apiKey }) => {
+    try {
+      const ModelDiscovery = require('./services/llm-orchestrator').ModelDiscovery ||
+                            require('./providers/model-discovery');
+      const models = await ModelDiscovery.getRecommendedModels(provider, apiKey);
+      return { success: true, models };
+    } catch (error) {
+      console.error('Error fetching provider models:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Handle IPC: Upload and process file
   ipcMain.handle('upload-file', async (event, { filePath, fileName }) => {
     try {

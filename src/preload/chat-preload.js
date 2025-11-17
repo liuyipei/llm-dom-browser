@@ -71,6 +71,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Fetch models dynamically for a provider (OpenRouter, Fireworks)
+   */
+  fetchProviderModels: (provider, apiKey) => {
+    return ipcRenderer.invoke('fetch-provider-models', { provider, apiKey });
+  },
+
+  /**
    * Upload and process a file (PDF, text, doc)
    */
   uploadFile: (filePath, fileName) => {
