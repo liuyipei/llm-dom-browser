@@ -34,8 +34,15 @@
         background: #2c3e50;
         color: white;
         padding: 16px;
-        text-align: center;
         border-bottom: 1px solid #34495e;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .header-content {
+        flex: 1;
+        text-align: center;
       }
 
       .header h1 {
@@ -46,6 +53,37 @@
       .header p {
         font-size: 12px;
         opacity: 0.8;
+      }
+
+      .menu-button {
+        background: transparent;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+
+      .menu-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.5);
+      }
+
+      .menu-button:active {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .menu-button.active {
+        background: rgba(52, 152, 219, 0.3);
+        border-color: #3498db;
       }
 
       .chat-container {
@@ -132,6 +170,14 @@
         background: #fafafa;
         max-height: 150px;
         overflow-y: auto;
+        transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+      }
+
+      .tabs-section.collapsed {
+        max-height: 0;
+        padding: 0 12px;
+        opacity: 0;
+        overflow: hidden;
       }
 
       .tabs-section h3 {
@@ -218,6 +264,16 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+        transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+        max-height: 500px;
+        overflow: visible;
+      }
+
+      .input-section.collapsed {
+        max-height: 0;
+        padding: 0 12px;
+        opacity: 0;
+        overflow: hidden;
       }
 
       .input-row {
@@ -446,8 +502,11 @@
   </head>
   <body>
     <div class="header">
-      <h1>🤖 LLM-DOM Browser</h1>
-      <p>Analyze web content with AI</p>
+      <button id="menuButton" class="menu-button" title="Toggle menu sections">☰</button>
+      <div class="header-content">
+        <h1>🤖 LLM-DOM Browser</h1>
+        <p>Analyze web content with AI</p>
+      </div>
     </div>
 
     <div class="chat-container" id="chatContainer">
@@ -655,9 +714,62 @@
       const ollamaPullInput = document.getElementById('ollamaPullInput');
       const ollamaPullBtn = document.getElementById('ollamaPullBtn');
       const ollamaPullProgress = document.getElementById('ollamaPullProgress');
+      const menuButton = document.getElementById('menuButton');
+      const tabsSection = document.querySelector('.tabs-section');
+      const inputSection = document.querySelector('.input-section');
 
       // Provider models data
       let providersData = null;
+
+      /**
+       * Menu management
+       */
+      const menuState = {
+        isCollapsed: false,
+
+        load() {
+          try {
+            const collapsed = localStorage.getItem('llm-dom-menu-collapsed');
+            return collapsed === 'true';
+          } catch (error) {
+            console.error('Error loading menu state:', error);
+            return false;
+          }
+        },
+
+        save(collapsed) {
+          try {
+            localStorage.setItem('llm-dom-menu-collapsed', collapsed.toString());
+          } catch (error) {
+            console.error('Error saving menu state:', error);
+          }
+        },
+
+        toggle() {
+          this.isCollapsed = !this.isCollapsed;
+          this.apply();
+          this.save(this.isCollapsed);
+        },
+
+        apply() {
+          if (this.isCollapsed) {
+            tabsSection.classList.add('collapsed');
+            inputSection.classList.add('collapsed');
+            menuButton.classList.add('active');
+            menuButton.title = 'Show menu sections';
+          } else {
+            tabsSection.classList.remove('collapsed');
+            inputSection.classList.remove('collapsed');
+            menuButton.classList.remove('active');
+            menuButton.title = 'Hide menu sections';
+          }
+        },
+
+        init() {
+          this.isCollapsed = this.load();
+          this.apply();
+        }
+      };
 
       /**
        * Load available providers and models
@@ -1538,6 +1650,7 @@
       }
 
       // Event Listeners
+      menuButton.addEventListener('click', () => menuState.toggle());
       openBtn.addEventListener('click', handleOpenTab);
       uploadBtn.addEventListener('click', handleUploadFile);
       sendBtn.addEventListener('click', handleSendQuery);
@@ -1609,6 +1722,9 @@
 
       // Initialize
       async function initialize() {
+        // Initialize menu state
+        menuState.init();
+
         // Load providers
         await loadProviders();
 
