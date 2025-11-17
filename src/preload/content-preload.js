@@ -169,42 +169,50 @@ function injectScrollbarStyles() {
     style.textContent = `
       /* Force scrollbars to be visible with better styling */
       ::-webkit-scrollbar {
-        width: 14px;
-        height: 14px;
+        width: 16px !important;
+        height: 16px !important;
       }
 
       ::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 0;
-        border-left: 1px solid #ddd;
+        background: #e0e0e0 !important;
+        border-left: 2px solid #ccc !important;
       }
 
       ::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 0;
-        border: 3px solid #f1f1f1;
+        background: #666 !important;
+        border: 4px solid #e0e0e0 !important;
+        min-height: 40px !important;
       }
 
       ::-webkit-scrollbar-thumb:hover {
-        background: #555;
+        background: #444 !important;
       }
 
-      /* Ensure scrollbar is always visible and properly positioned */
+      ::-webkit-scrollbar-corner {
+        background: #e0e0e0 !important;
+      }
+
+      /* Force scrollbar to always show */
       html {
         overflow-y: scroll !important;
         overflow-x: auto !important;
-        scrollbar-gutter: stable;
       }
 
       body {
-        overflow: visible !important;
+        overflow: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 100vh !important;
       }
 
-      /* Ensure root element takes full height */
-      html, body {
-        height: 100%;
-        margin: 0;
-        padding: 0;
+      /* Ensure scrollbar has space by adding margin to body */
+      body {
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+      }
+
+      * {
+        scrollbar-width: auto !important;
       }
     `;
 

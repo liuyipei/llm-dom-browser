@@ -41,14 +41,16 @@ function updateViewBounds() {
   const contentWidth = bounds.width - chatWidth;
 
   // Update chat view bounds
+  // Add small buffer to height to prevent bottom padding clipping
   if (chatView && !chatView.webContents.isDestroyed()) {
-    chatView.setBounds({ x: 0, y: 0, width: chatWidth, height: bounds.height });
+    chatView.setBounds({ x: 0, y: 0, width: chatWidth, height: bounds.height + 2 });
   }
 
   // Update all content view bounds
+  // Add small buffer to dimensions to prevent edge clipping of scrollbars
   contentViews.forEach((view, tabId) => {
     if (view && !view.webContents.isDestroyed()) {
-      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height });
+      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height + 2 });
     }
   });
 }
@@ -318,8 +320,9 @@ function createWindow() {
       contentViews.set(tabId, contentView);
 
       // Set bounds based on current window size
+      // Add small buffer to height to prevent edge clipping of scrollbars
       const bounds = mainWindow.getBounds();
-      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height + 2 });
 
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
@@ -428,9 +431,10 @@ function createWindow() {
       mainWindow.contentView.addChildView(view);
 
       // Set bounds based on current window size
+      // Add small buffer to height to prevent edge clipping of scrollbars
       const bounds = mainWindow.getBounds();
       const chatWidth = 400;
-      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height + 2 });
 
       // Update active tab tracking
       activeTabId = tabId;
