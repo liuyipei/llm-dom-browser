@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, ipcMain } = require('electron');
+const { app, BaseWindow, WebContentsView, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const PDFService = require('./services/pdf-service');
@@ -6,9 +6,21 @@ const LLMOrchestrator = require('./services/llm-orchestrator');
 
 let mainWindow;
 let chatView; // Reference to chat UI view for sending updates
+let persistentSession; // Persistent session for localStorage
 const contentViews = new Map();
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
+
+/**
+ * Initialize a persistent session for localStorage storage
+ */
+function initializePersistentSession() {
+  // Get or create a persistent session named 'persist'
+  persistentSession = session.fromPartition('persist:llm-dom-browser', { cache: true });
+
+  console.log('Initialized persistent session for localStorage storage');
+  return persistentSession;
+}
 
 /**
  * Generate a unique ID for tabs/views
@@ -29,12 +41,18 @@ function createWindow() {
   });
 
   // Create chat UI view (left sidebar)
+  // Use persistent session to enable localStorage persistence
+  if (!persistentSession) {
+    initializePersistentSession();
+  }
+
   chatView = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload', 'chat-preload.js'),
-      sandbox: true
+      sandbox: true,
+      session: persistentSession
     }
   });
 
@@ -275,7 +293,10 @@ function extractFilePathFromURL(url) {
 }
 
 // App event handlers
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  initializePersistentSession();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   // On macOS, quit when all windows are closed
