@@ -92,6 +92,13 @@
         text-transform: uppercase;
       }
 
+      .tabs-section .help-text {
+        font-size: 10px;
+        color: #999;
+        margin-bottom: 6px;
+        font-style: italic;
+      }
+
       .tab-list {
         display: flex;
         flex-direction: column;
@@ -112,6 +119,11 @@
 
       .tab-item:hover {
         background: #f0f0f0;
+      }
+
+      .tab-item .clickable-area:hover {
+        background: #e8f4f8;
+        border-radius: 3px;
       }
 
       .tab-item.active {
@@ -236,6 +248,7 @@
 
     <div class="tabs-section">
       <h3>📑 Open Tabs</h3>
+      <div class="help-text">Click tab to view, checkbox to select for LLM</div>
       <div class="tab-list" id="tabList"></div>
     </div>
 
@@ -572,7 +585,10 @@
 
           const result = await window.electronAPI.openTab(finalUrl);
           console.log('[UI] Tab opened, result:', result);
-          state.activeTabs.set(result.id, { url: result.url, title: 'Loading...' });
+
+          // Use the title from the result if available, otherwise default to 'Loading...'
+          const initialTitle = result.title || 'Loading...';
+          state.activeTabs.set(result.id, { url: result.url, title: initialTitle });
 
           // Set as active tab if it's the first tab
           if (result.isActive) {
@@ -741,6 +757,7 @@
           checkbox.type = 'checkbox';
           checkbox.checked = isSelected;
           checkbox.style.cursor = 'pointer';
+          checkbox.title = isSelected ? 'Remove from LLM query' : 'Include in LLM query';
           checkbox.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent triggering tab switch
             toggleTabSelection(tabId);
@@ -752,7 +769,9 @@
 
           // Create clickable div for tab switching
           const clickableDiv = document.createElement('div');
-          clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 8px;';
+          clickableDiv.className = 'clickable-area';
+          clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 2px;';
+          clickableDiv.title = isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab';
           clickableDiv.appendChild(checkbox);
           clickableDiv.appendChild(titleSpan);
           clickableDiv.addEventListener('click', (e) => {
@@ -846,6 +865,7 @@
 
         updateStatus('Ready', 'success');
         addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
+        addMessage('💡 Tip: Press F12 to open DevTools for the UI, Ctrl+Shift+C for the active tab', 'system');
       }
 
       initialize();

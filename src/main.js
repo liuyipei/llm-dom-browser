@@ -139,8 +139,11 @@ function createWindow() {
         }
       }
 
-      console.log(`Opened tab ${tabId} with URL: ${url}`);
-      return { id: tabId, url, isActive: tabId === activeTabId };
+      // Get the current title (which might have already been set by events that fired during load)
+      const currentTitle = contentView.webContents.getTitle();
+
+      console.log(`Opened tab ${tabId} with URL: ${url}, initial title: ${currentTitle}`);
+      return { id: tabId, url, title: currentTitle, isActive: tabId === activeTabId };
     } catch (error) {
       console.error('Error opening tab:', error);
       throw error;
@@ -342,6 +345,51 @@ function createWindow() {
     }
   });
 
+  // Add keyboard shortcut for DevTools (F12 or Cmd/Ctrl+Shift+I)
+  mainWindow.on('system-context-menu', (event) => {
+    event.preventDefault();
+  });
+
+  // Listen for keyboard shortcuts to open DevTools
+  // We'll use a simple global shortcut for now
+  const { globalShortcut } = require('electron');
+
+  // Register F12 for DevTools
+  globalShortcut.register('F12', () => {
+    if (chatView && chatView.webContents) {
+      if (chatView.webContents.isDevToolsOpened()) {
+        chatView.webContents.closeDevTools();
+      } else {
+        chatView.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+
+  // Register Cmd/Ctrl+Shift+I for DevTools
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    if (chatView && chatView.webContents) {
+      if (chatView.webContents.isDevToolsOpened()) {
+        chatView.webContents.closeDevTools();
+      } else {
+        chatView.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+
+  // Register Cmd/Ctrl+Shift+C for content view DevTools
+  globalShortcut.register('CommandOrControl+Shift+C', () => {
+    if (activeTabId) {
+      const view = contentViews.get(activeTabId);
+      if (view && view.webContents) {
+        if (view.webContents.isDevToolsOpened()) {
+          view.webContents.closeDevTools();
+        } else {
+          view.webContents.openDevTools({ mode: 'detach' });
+        }
+      }
+    }
+  });
+
   mainWindow.show();
 }
 
@@ -385,6 +433,10 @@ app.on('activate', () => {
 
 // Cleanup on app quit
 app.on('before-quit', () => {
+  // Unregister all global shortcuts
+  const { globalShortcut } = require('electron');
+  globalShortcut.unregisterAll();
+
   // Destroy all content views
   contentViews.forEach((view, tabId) => {
     try {
