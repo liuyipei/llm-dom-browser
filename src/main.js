@@ -153,12 +153,22 @@ function createWindow() {
   });
 
   // Handle IPC: Send query to LLM with context
-  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey }) => {
+  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model }) => {
     try {
-      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey);
+      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model);
     } catch (error) {
       console.error('Error querying LLM:', error);
       throw error;
+    }
+  });
+
+  // Handle IPC: Get available providers and models
+  ipcMain.handle('get-providers', async () => {
+    try {
+      return llmOrchestrator.getAvailableProviders();
+    } catch (error) {
+      console.error('Error getting providers:', error);
+      return { error: error.message };
     }
   });
 

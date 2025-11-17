@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Send a query to the LLM with context from selected tabs
    */
-  queryLLM: (query, tabIds, apiKey) => {
+  queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null) => {
     if (typeof query !== 'string' || !query.trim()) {
       throw new Error('Invalid query');
     }
@@ -57,8 +57,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('query-llm', {
       query: query.trim(),
       tabIds,
-      apiKey
+      apiKey,
+      provider,
+      model
     });
+  },
+
+  /**
+   * Get available providers and models
+   */
+  getProviders: () => {
+    return ipcRenderer.invoke('get-providers');
   },
 
   /**
