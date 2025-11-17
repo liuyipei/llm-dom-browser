@@ -26,7 +26,7 @@ class LLMOrchestrator {
   /**
    * Analyze content from one or more tabs using LLM
    */
-  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null) {
+  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false) {
     try {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid query');
@@ -41,7 +41,7 @@ class LLMOrchestrator {
       }
 
       // Extract content from all specified tabs
-      const contextItems = await this._extractContextFromTabs(tabIds);
+      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia });
 
       if (contextItems.length === 0) {
         throw new Error('No content available from specified tabs');
@@ -51,7 +51,7 @@ class LLMOrchestrator {
       const prompt = this._buildPrompt(query, contextItems);
 
       // Send to remote LLM API
-      const response = await this._queryRemoteLLM(prompt, apiKey, provider, model);
+      const response = await this._queryRemoteLLM(prompt, apiKey, provider, model, includeMedia);
 
       // Store in history
       this._addToHistory({
@@ -60,6 +60,7 @@ class LLMOrchestrator {
         tabIds,
         provider,
         model,
+        includeMedia,
         contextLength: prompt.length,
         responseLength: response.length
       });
@@ -84,7 +85,7 @@ class LLMOrchestrator {
   /**
    * Extract content from specified tabs
    */
-  async _extractContextFromTabs(tabIds) {
+  async _extractContextFromTabs(tabIds, options = {}) {
     const contextItems = [];
 
     for (const tabId of tabIds) {
@@ -113,7 +114,7 @@ class LLMOrchestrator {
           // Extract HTML DOM
           try {
             const domData = await view.webContents.executeJavaScript(
-              'window.contentAPI ? window.contentAPI.getSerializedDOM() : null'
+              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(options)}) : null`
             );
 
             if (domData) {
@@ -180,6 +181,23 @@ Here is the content from the browser tabs and documents the user is analyzing:
             .slice(0, 5)
             .join('\n')}\n`;
         }
+
+        // Include media information if available
+        if (item.dom.media) {
+          if (item.dom.media.images && item.dom.media.images.length > 0) {
+            prompt += `\nImages (${item.dom.media.count.images}):\n`;
+            item.dom.media.images.forEach((img, idx) => {
+              prompt += `  ${idx + 1}. ${img.alt || 'No alt text'} - ${img.src}\n`;
+              if (img.title) prompt += `     Title: ${img.title}\n`;
+            });
+          }
+          if (item.dom.media.videos && item.dom.media.videos.length > 0) {
+            prompt += `\nVideos (${item.dom.media.count.videos}):\n`;
+            item.dom.media.videos.forEach((video, idx) => {
+              prompt += `  ${idx + 1}. ${video.src || video.poster || 'Video element'}\n`;
+            });
+          }
+        }
       } else if (item.content) {
         prompt += `\nContent:\n${item.content}\n`;
       }
@@ -200,7 +218,7 @@ Focus on information found in the provided content when possible.`;
   /**
    * Send query to remote LLM API using the selected provider
    */
-  async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null) {
+  async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null, includeMedia = false) {
     try {
       // Create provider instance
       const providerInstance = ProviderFactory.createProvider(provider, {
@@ -211,6 +229,8 @@ Focus on information found in the provided content when possible.`;
       this.currentProvider = providerInstance;
 
       // Generate completion using the provider
+      // Note: For vision models, image URLs are included in the prompt text
+      // Future enhancement: Use multimodal message format for proper vision API support
       const response = await providerInstance.generateCompletion(prompt, {
         temperature: 0.7,
         maxTokens: 2000

@@ -123,7 +123,7 @@ function createWindow() {
   });
 
   // Handle IPC: Extract content from view for LLM analysis
-  ipcMain.handle('extract-content', async (event, tabId) => {
+  ipcMain.handle('extract-content', async (event, tabId, options = {}) => {
     try {
       const view = contentViews.get(tabId);
       if (!view) {
@@ -149,7 +149,7 @@ function createWindow() {
         // HTML: Serialize DOM via preload script
         try {
           const domData = await view.webContents.executeJavaScript(
-            'window.contentAPI ? window.contentAPI.getSerializedDOM() : null'
+            `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(options)}) : null`
           );
           return {
             type: 'html',
@@ -175,9 +175,9 @@ function createWindow() {
   });
 
   // Handle IPC: Send query to LLM with context
-  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model }) => {
+  ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model, includeMedia }) => {
     try {
-      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model);
+      return await llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia);
     } catch (error) {
       console.error('Error querying LLM:', error);
       throw error;

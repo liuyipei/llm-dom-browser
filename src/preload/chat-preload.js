@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Send a query to the LLM with context from selected tabs
    */
-  queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null) => {
+  queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false) => {
     if (typeof query !== 'string' || !query.trim()) {
       throw new Error('Invalid query');
     }
@@ -59,7 +59,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       tabIds,
       apiKey,
       provider,
-      model
+      model,
+      includeMedia
     });
   },
 

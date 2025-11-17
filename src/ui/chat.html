@@ -267,6 +267,13 @@
       </div>
 
       <div class="input-row">
+        <label>
+          <input type="checkbox" id="includeMediaCheckbox" />
+          Include media (images, videos) for vision models
+        </label>
+      </div>
+
+      <div class="input-row">
         <input type="text" id="queryInput" placeholder="Ask a question..." />
         <button id="sendBtn" class="button-small">Send</button>
       </div>
@@ -292,6 +299,7 @@
       const apiKeyInput = document.getElementById('apiKeyInput');
       const providerSelect = document.getElementById('providerSelect');
       const modelSelect = document.getElementById('modelSelect');
+      const includeMediaCheckbox = document.getElementById('includeMediaCheckbox');
       const queryInput = document.getElementById('queryInput');
       const sendBtn = document.getElementById('sendBtn');
       const statusEl = document.getElementById('status');
@@ -532,6 +540,7 @@
         const provider = providerSelect.value;
         const model = modelSelect.value || null;
         const tabIds = Array.from(state.selectedTabs);
+        const includeMedia = includeMediaCheckbox.checked;
 
         if (!query) {
           updateStatus('Please enter a question', 'error');
@@ -553,7 +562,7 @@
           updateStatus(`Analyzing content with ${provider}...`);
           addMessage(`Q: ${query}`, 'user');
 
-          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model);
+          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia);
 
           if (result.success) {
             addMessage(result.response, 'assistant');
