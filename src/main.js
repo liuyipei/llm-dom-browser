@@ -9,6 +9,7 @@ let chatView; // Reference to chat UI view for sending updates
 let persistentSession; // Persistent session for localStorage
 const contentViews = new Map();
 let activeTabId = null; // Track currently visible tab
+let chatWidth = 400; // Default chat sidebar width, can be adjusted by user
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
 
@@ -37,7 +38,6 @@ function updateViewBounds() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
   const bounds = mainWindow.getBounds();
-  const chatWidth = 400;
   const contentWidth = bounds.width - chatWidth;
 
   // Update chat view bounds
@@ -319,7 +319,6 @@ function createWindow() {
 
       // Set bounds based on current window size
       const bounds = mainWindow.getBounds();
-      const chatWidth = 400;
       contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
 
       // Listen for various load events to help debug loading issues
@@ -645,6 +644,24 @@ function createWindow() {
     } catch (error) {
       console.error('Error uploading file:', error);
       throw error;
+    }
+  });
+
+  // Handle IPC: Update chat width (for resizable split)
+  ipcMain.handle('update-chat-width', (event, newWidth) => {
+    try {
+      // Constrain width to reasonable bounds (200px min, 80% of window max)
+      const bounds = mainWindow.getBounds();
+      const minWidth = 200;
+      const maxWidth = Math.floor(bounds.width * 0.8);
+
+      chatWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+      updateViewBounds();
+
+      return { success: true, chatWidth };
+    } catch (error) {
+      console.error('Error updating chat width:', error);
+      return { success: false, error: error.message };
     }
   });
 
