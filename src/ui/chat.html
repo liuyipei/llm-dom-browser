@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LLM-DOM Browser Chat</title>
+
+    <!-- Markdown, Code Highlighting, Math, and Sanitization Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
     <style>
       * {
         margin: 0;
@@ -276,6 +285,162 @@
 
       .success {
         color: #27ae60;
+      }
+
+      /* Message controls (copy button and toggle) */
+      .message-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .message-controls button {
+        padding: 4px 8px;
+        font-size: 10px;
+        background: #95a5a6;
+        border-radius: 3px;
+      }
+
+      .message-controls button:hover {
+        background: #7f8c8d;
+      }
+
+      .message-controls .copy-btn {
+        background: #3498db;
+      }
+
+      .message-controls .copy-btn:hover {
+        background: #2980b9;
+      }
+
+      .message-controls .copy-btn.copied {
+        background: #27ae60;
+      }
+
+      .message-controls label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        color: #666;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .message-controls input[type="checkbox"] {
+        cursor: pointer;
+      }
+
+      /* Rendered content styling */
+      .message-content {
+        line-height: 1.6;
+      }
+
+      .message-content pre {
+        background: #f6f8fa;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 16px;
+        overflow-x: auto;
+        margin: 12px 0;
+      }
+
+      .message-content code {
+        background: #f6f8fa;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+      }
+
+      .message-content pre code {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+      }
+
+      .message-content blockquote {
+        border-left: 4px solid #d0d7de;
+        padding-left: 16px;
+        margin: 12px 0;
+        color: #57606a;
+      }
+
+      .message-content table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 12px 0;
+      }
+
+      .message-content table th,
+      .message-content table td {
+        border: 1px solid #d0d7de;
+        padding: 8px;
+        text-align: left;
+      }
+
+      .message-content table th {
+        background: #f6f8fa;
+        font-weight: 600;
+      }
+
+      .message-content h1,
+      .message-content h2,
+      .message-content h3,
+      .message-content h4,
+      .message-content h5,
+      .message-content h6 {
+        margin-top: 16px;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      .message-content h1 { font-size: 1.5em; }
+      .message-content h2 { font-size: 1.3em; }
+      .message-content h3 { font-size: 1.1em; }
+
+      .message-content ul,
+      .message-content ol {
+        margin: 8px 0;
+        padding-left: 24px;
+      }
+
+      .message-content li {
+        margin: 4px 0;
+      }
+
+      .message-content p {
+        margin: 8px 0;
+      }
+
+      .message-content a {
+        color: #0969da;
+        text-decoration: none;
+      }
+
+      .message-content a:hover {
+        text-decoration: underline;
+      }
+
+      /* Math rendering */
+      .message-content .katex {
+        font-size: 1.1em;
+      }
+
+      .message-content .katex-display {
+        margin: 16px 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      /* Raw text view */
+      .message-raw {
+        white-space: pre-wrap;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
       }
     </style>
   </head>
@@ -671,6 +836,106 @@
       });
 
       /**
+       * Render markdown text with code highlighting and math support
+       * @param {string} text - The markdown text to render
+       * @returns {string} - Sanitized HTML
+       */
+      function renderMarkdown(text) {
+        // Configure marked for code highlighting
+        marked.setOptions({
+          highlight: function(code, lang) {
+            if (lang && hljs.getLanguage(lang)) {
+              try {
+                return hljs.highlight(code, { language: lang }).value;
+              } catch (err) {
+                console.error('Highlighting error:', err);
+              }
+            }
+            return hljs.highlightAuto(code).value;
+          },
+          breaks: true,
+          gfm: true
+        });
+
+        // Process LaTeX math expressions before markdown
+        // Replace display math $$...$$ with placeholders
+        const displayMathPlaceholders = [];
+        let processed = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+          const placeholder = `__DISPLAYMATH${displayMathPlaceholders.length}__`;
+          try {
+            const rendered = katex.renderToString(math.trim(), {
+              displayMode: true,
+              throwOnError: false,
+              output: 'html'
+            });
+            displayMathPlaceholders.push(rendered);
+          } catch (err) {
+            console.error('KaTeX display math error:', err);
+            displayMathPlaceholders.push(match); // Keep original if error
+          }
+          return placeholder;
+        });
+
+        // Replace inline math $...$ with placeholders
+        const inlineMathPlaceholders = [];
+        processed = processed.replace(/\$([^\$\n]+?)\$/g, (match, math) => {
+          const placeholder = `__INLINEMATH${inlineMathPlaceholders.length}__`;
+          try {
+            const rendered = katex.renderToString(math.trim(), {
+              displayMode: false,
+              throwOnError: false,
+              output: 'html'
+            });
+            inlineMathPlaceholders.push(rendered);
+          } catch (err) {
+            console.error('KaTeX inline math error:', err);
+            inlineMathPlaceholders.push(match); // Keep original if error
+          }
+          return placeholder;
+        });
+
+        // Render markdown
+        let html = marked.parse(processed);
+
+        // Restore math placeholders
+        displayMathPlaceholders.forEach((math, i) => {
+          html = html.replace(`__DISPLAYMATH${i}__`, math);
+        });
+        inlineMathPlaceholders.forEach((math, i) => {
+          html = html.replace(`__INLINEMATH${i}__`, math);
+        });
+
+        // Sanitize and return
+        return DOMPurify.sanitize(html, {
+          ADD_TAGS: ['math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtext'],
+          ADD_ATTR: ['class', 'style']
+        });
+      }
+
+      /**
+       * Copy text to clipboard
+       * @param {string} text - Text to copy
+       * @param {HTMLElement} button - The copy button element
+       */
+      function copyToClipboard(text, button) {
+        navigator.clipboard.writeText(text).then(() => {
+          const originalText = button.textContent;
+          button.textContent = 'Copied!';
+          button.classList.add('copied');
+          setTimeout(() => {
+            button.textContent = originalText;
+            button.classList.remove('copied');
+          }, 2000);
+        }).catch(err => {
+          console.error('Failed to copy:', err);
+          button.textContent = 'Failed';
+          setTimeout(() => {
+            button.textContent = 'Copy';
+          }, 2000);
+        });
+      }
+
+      /**
        * Add message to chat
        * @param {string} text - The message text
        * @param {string} type - Message type: 'user', 'assistant', 'system', 'error'
@@ -684,7 +949,66 @@
         // Create message element
         const messageEl = document.createElement('div');
         messageEl.className = `message ${type}`;
-        messageEl.textContent = text;
+
+        // For user and assistant messages, create dual view (raw/rendered)
+        const isFormattable = (type === 'user' || type === 'assistant');
+
+        if (isFormattable) {
+          // Create rendered content div
+          const renderedDiv = document.createElement('div');
+          renderedDiv.className = 'message-content';
+          renderedDiv.innerHTML = renderMarkdown(text);
+          renderedDiv.style.display = 'block';
+
+          // Create raw content div
+          const rawDiv = document.createElement('div');
+          rawDiv.className = 'message-raw';
+          rawDiv.textContent = text;
+          rawDiv.style.display = 'none';
+
+          messageEl.appendChild(renderedDiv);
+          messageEl.appendChild(rawDiv);
+
+          // Create controls (copy button + toggle)
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'message-controls';
+
+          // Copy button
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'copy-btn';
+          copyBtn.textContent = 'Copy';
+          copyBtn.addEventListener('click', () => copyToClipboard(text, copyBtn));
+
+          // Toggle checkbox
+          const toggleLabel = document.createElement('label');
+          const toggleCheckbox = document.createElement('input');
+          toggleCheckbox.type = 'checkbox';
+          toggleCheckbox.checked = false;
+          toggleCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+              // Show raw
+              renderedDiv.style.display = 'none';
+              rawDiv.style.display = 'block';
+            } else {
+              // Show rendered
+              renderedDiv.style.display = 'block';
+              rawDiv.style.display = 'none';
+            }
+          });
+
+          const toggleText = document.createTextNode('Show raw text');
+          toggleLabel.appendChild(toggleCheckbox);
+          toggleLabel.appendChild(toggleText);
+
+          controlsDiv.appendChild(copyBtn);
+          controlsDiv.appendChild(toggleLabel);
+
+          messageEl.appendChild(controlsDiv);
+        } else {
+          // For system/error messages, just use plain text
+          messageEl.textContent = text;
+        }
+
         containerEl.appendChild(messageEl);
 
         // Add stats if provided (for assistant messages)

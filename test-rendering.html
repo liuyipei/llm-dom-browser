@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rendering Test - LLM DOM Browser</title>
+
+  <!-- Same libraries as chat.html -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      color: #2c3e50;
+      border-bottom: 3px solid #3498db;
+      padding-bottom: 10px;
+    }
+
+    .test-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .test-section h2 {
+      color: #34495e;
+      margin-top: 0;
+    }
+
+    .raw-input {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      margin-bottom: 15px;
+    }
+
+    .rendered-output {
+      background: #ecf0f1;
+      border: 1px solid #bdc3c7;
+      border-radius: 4px;
+      padding: 12px;
+      line-height: 1.6;
+    }
+
+    .rendered-output pre {
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    .rendered-output code {
+      background: #f6f8fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.9em;
+    }
+
+    .rendered-output pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .rendered-output table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0;
+    }
+
+    .rendered-output table th,
+    .rendered-output table td {
+      border: 1px solid #d0d7de;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .rendered-output table th {
+      background: #f6f8fa;
+      font-weight: 600;
+    }
+
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 LLM Output Rendering Test Suite</h1>
+  <p>This page tests the markdown, code, and LaTeX rendering implementation for the LLM-DOM Browser chat UI.</p>
+
+  <div id="status" class="status success">Loading libraries...</div>
+
+  <div class="test-section">
+    <h2>Test 1: Code Block with Syntax Highlighting</h2>
+    <div class="raw-input">```python
+def solve_quadratic(a, b, c):
+    """Solve ax^2 + bx + c = 0"""
+    discriminant = b**2 - 4*a*c
+    if discriminant < 0:
+        return None
+    x1 = (-b + discriminant**0.5) / (2*a)
+    x2 = (-b - discriminant**0.5) / (2*a)
+    return x1, x2
+```</div>
+    <div class="rendered-output" id="test1"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 2: Inline Math</h2>
+    <div class="raw-input">The quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ and it's very useful!</div>
+    <div class="rendered-output" id="test2"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 3: Display Math</h2>
+    <div class="raw-input">The solution to the quadratic equation is:
+
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+
+This formula works for all quadratic equations.</div>
+    <div class="rendered-output" id="test3"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 4: Mixed Content (Markdown + Code + Math)</h2>
+    <div class="raw-input">### Solving Quadratic Equations
+
+Here's a **Python implementation** of the quadratic formula:
+
+```python
+import math
+
+def solve(a, b, c):
+    disc = b**2 - 4*a*c
+    if disc < 0:
+        return "No real solutions"
+    return [
+        (-b + math.sqrt(disc)) / (2*a),
+        (-b - math.sqrt(disc)) / (2*a)
+    ]
+```
+
+The discriminant $\Delta = b^2 - 4ac$ determines the nature of the roots:
+- If $\Delta > 0$: two distinct real roots
+- If $\Delta = 0$: one repeated real root
+- If $\Delta < 0$: two complex conjugate roots</div>
+    <div class="rendered-output" id="test4"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 5: Table</h2>
+    <div class="raw-input">| Function | Complexity | Description |
+|----------|-----------|-------------|
+| `bubble_sort()` | $O(n^2)$ | Simple but slow |
+| `merge_sort()` | $O(n \log n)$ | Efficient divide-and-conquer |
+| `quick_sort()` | $O(n \log n)$ | Fast in practice |</div>
+    <div class="rendered-output" id="test5"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 6: Complex Math (Matrix)</h2>
+    <div class="raw-input">A system of linear equations can be written as:
+
+$$
+\begin{bmatrix}
+a_{11} & a_{12} & a_{13} \\
+a_{21} & a_{22} & a_{23} \\
+a_{31} & a_{32} & a_{33}
+\end{bmatrix}
+\begin{bmatrix}
+x_1 \\ x_2 \\ x_3
+\end{bmatrix}
+=
+\begin{bmatrix}
+b_1 \\ b_2 \\ b_3
+\end{bmatrix}
+$$</div>
+    <div class="rendered-output" id="test6"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 7: Lists and Formatting</h2>
+    <div class="raw-input">**Common sorting algorithms:**
+
+1. **Bubble Sort** - Simple comparison sort
+   - Time: $O(n^2)$
+   - Space: $O(1)$
+2. **Merge Sort** - Divide and conquer
+   - Time: $O(n \log n)$
+   - Space: $O(n)$
+3. **Quick Sort** - Partition-based
+   - Average: $O(n \log n)$
+   - Worst: $O(n^2)$
+
+*Note: Always consider the input size when choosing an algorithm!*</div>
+    <div class="rendered-output" id="test7"></div>
+  </div>
+
+  <script>
+    // Same renderMarkdown function as in chat.html
+    function renderMarkdown(text) {
+      marked.setOptions({
+        highlight: function(code, lang) {
+          if (lang && hljs.getLanguage(lang)) {
+            try {
+              return hljs.highlight(code, { language: lang }).value;
+            } catch (err) {
+              console.error('Highlighting error:', err);
+            }
+          }
+          return hljs.highlightAuto(code).value;
+        },
+        breaks: true,
+        gfm: true
+      });
+
+      // Process LaTeX math expressions before markdown
+      const displayMathPlaceholders = [];
+      let processed = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+        const placeholder = `__DISPLAYMATH${displayMathPlaceholders.length}__`;
+        try {
+          const rendered = katex.renderToString(math.trim(), {
+            displayMode: true,
+            throwOnError: false,
+            output: 'html'
+          });
+          displayMathPlaceholders.push(rendered);
+        } catch (err) {
+          console.error('KaTeX display math error:', err);
+          displayMathPlaceholders.push(match);
+        }
+        return placeholder;
+      });
+
+      const inlineMathPlaceholders = [];
+      processed = processed.replace(/\$([^\$\n]+?)\$/g, (match, math) => {
+        const placeholder = `__INLINEMATH${inlineMathPlaceholders.length}__`;
+        try {
+          const rendered = katex.renderToString(math.trim(), {
+            displayMode: false,
+            throwOnError: false,
+            output: 'html'
+          });
+          inlineMathPlaceholders.push(rendered);
+        } catch (err) {
+          console.error('KaTeX inline math error:', err);
+          inlineMathPlaceholders.push(match);
+        }
+        return placeholder;
+      });
+
+      let html = marked.parse(processed);
+
+      displayMathPlaceholders.forEach((math, i) => {
+        html = html.replace(`__DISPLAYMATH${i}__`, math);
+      });
+      inlineMathPlaceholders.forEach((math, i) => {
+        html = html.replace(`__INLINEMATH${i}__`, math);
+      });
+
+      return DOMPurify.sanitize(html, {
+        ADD_TAGS: ['math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtext'],
+        ADD_ATTR: ['class', 'style']
+      });
+    }
+
+    // Wait for libraries to load
+    window.addEventListener('load', function() {
+      try {
+        // Test 1: Code block
+        const test1Text = `\`\`\`python
+def solve_quadratic(a, b, c):
+    """Solve ax^2 + bx + c = 0"""
+    discriminant = b**2 - 4*a*c
+    if discriminant < 0:
+        return None
+    x1 = (-b + discriminant**0.5) / (2*a)
+    x2 = (-b - discriminant**0.5) / (2*a)
+    return x1, x2
+\`\`\``;
+        document.getElementById('test1').innerHTML = renderMarkdown(test1Text);
+
+        // Test 2: Inline math
+        const test2Text = 'The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$ and it\'s very useful!';
+        document.getElementById('test2').innerHTML = renderMarkdown(test2Text);
+
+        // Test 3: Display math
+        const test3Text = `The solution to the quadratic equation is:
+
+$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$
+
+This formula works for all quadratic equations.`;
+        document.getElementById('test3').innerHTML = renderMarkdown(test3Text);
+
+        // Test 4: Mixed content
+        const test4Text = `### Solving Quadratic Equations
+
+Here's a **Python implementation** of the quadratic formula:
+
+\`\`\`python
+import math
+
+def solve(a, b, c):
+    disc = b**2 - 4*a*c
+    if disc < 0:
+        return "No real solutions"
+    return [
+        (-b + math.sqrt(disc)) / (2*a),
+        (-b - math.sqrt(disc)) / (2*a)
+    ]
+\`\`\`
+
+The discriminant $\\Delta = b^2 - 4ac$ determines the nature of the roots:
+- If $\\Delta > 0$: two distinct real roots
+- If $\\Delta = 0$: one repeated real root
+- If $\\Delta < 0$: two complex conjugate roots`;
+        document.getElementById('test4').innerHTML = renderMarkdown(test4Text);
+
+        // Test 5: Table
+        const test5Text = `| Function | Complexity | Description |
+|----------|-----------|-------------|
+| \`bubble_sort()\` | $O(n^2)$ | Simple but slow |
+| \`merge_sort()\` | $O(n \\log n)$ | Efficient divide-and-conquer |
+| \`quick_sort()\` | $O(n \\log n)$ | Fast in practice |`;
+        document.getElementById('test5').innerHTML = renderMarkdown(test5Text);
+
+        // Test 6: Complex math
+        const test6Text = `A system of linear equations can be written as:
+
+$$
+\\begin{bmatrix}
+a_{11} & a_{12} & a_{13} \\\\
+a_{21} & a_{22} & a_{23} \\\\
+a_{31} & a_{32} & a_{33}
+\\end{bmatrix}
+\\begin{bmatrix}
+x_1 \\\\ x_2 \\\\ x_3
+\\end{bmatrix}
+=
+\\begin{bmatrix}
+b_1 \\\\ b_2 \\\\ b_3
+\\end{bmatrix}
+$$`;
+        document.getElementById('test6').innerHTML = renderMarkdown(test6Text);
+
+        // Test 7: Lists
+        const test7Text = `**Common sorting algorithms:**
+
+1. **Bubble Sort** - Simple comparison sort
+   - Time: $O(n^2)$
+   - Space: $O(1)$
+2. **Merge Sort** - Divide and conquer
+   - Time: $O(n \\log n)$
+   - Space: $O(n)$
+3. **Quick Sort** - Partition-based
+   - Average: $O(n \\log n)$
+   - Worst: $O(n^2)$
+
+*Note: Always consider the input size when choosing an algorithm!*`;
+        document.getElementById('test7').innerHTML = renderMarkdown(test7Text);
+
+        document.getElementById('status').textContent = '✅ All tests rendered successfully! Check each section above.';
+        document.getElementById('status').className = 'status success';
+      } catch (error) {
+        document.getElementById('status').textContent = '❌ Error: ' + error.message;
+        document.getElementById('status').className = 'status error';
+        console.error('Rendering error:', error);
+      }
+    });
+  </script>
+</body>
+</html>
