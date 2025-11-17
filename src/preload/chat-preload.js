@@ -32,6 +32,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Switch to a different tab
+   */
+  switchTab: (tabId) => {
+    if (typeof tabId !== 'string') {
+      throw new Error('Invalid tab ID');
+    }
+    return ipcRenderer.invoke('switch-tab', tabId);
+  },
+
+  /**
    * Extract content from a tab for LLM analysis
    */
   extractContent: (tabId) => {
@@ -116,6 +126,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tab-title-updated', listener);
     // Return unsubscribe function
     return () => ipcRenderer.removeListener('tab-title-updated', listener);
+  },
+
+  /**
+   * Listen for active tab changes
+   */
+  onActiveTabChanged: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('active-tab-changed', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('active-tab-changed', listener);
   },
 
   /**

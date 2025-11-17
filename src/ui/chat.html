@@ -120,6 +120,17 @@
         border-color: #3498db;
       }
 
+      .tab-item.current {
+        border: 2px solid #e67e22;
+        border-left: 4px solid #e67e22;
+        background: #fef5e7;
+      }
+
+      .tab-item.current.active {
+        background: #3498db;
+        border-color: #2980b9;
+      }
+
       .tab-item button {
         background: #e74c3c;
         color: white;
@@ -332,6 +343,7 @@
       const state = {
         activeTabs: new Map(),
         selectedTabs: new Set(),
+        activeTabId: null, // Currently visible tab
         isLoading: false
       };
 
@@ -561,6 +573,11 @@
           const result = await window.electronAPI.openTab(finalUrl);
           state.activeTabs.set(result.id, { url: result.url, title: 'Loading...' });
 
+          // Set as active tab if it's the first tab
+          if (result.isActive) {
+            state.activeTabId = result.id;
+          }
+
           addMessage(`✅ Opened: ${finalUrl}`, 'system');
           updateStatus('Tab opened successfully', 'success');
           urlInput.value = '';
@@ -673,9 +690,26 @@
       }
 
       /**
-       * Toggle tab selection
+       * Switch to a tab (make it visible)
        */
-      function toggleTabSelection(tabId) {
+      async function switchTab(tabId) {
+        try {
+          await window.electronAPI.switchTab(tabId);
+          // The active tab will be updated via the onActiveTabChanged listener
+        } catch (error) {
+          console.error('Error switching tab:', error);
+          updateStatus(`Error switching tab: ${error.message}`, 'error');
+        }
+      }
+
+      /**
+       * Toggle tab selection for LLM query
+       */
+      function toggleTabSelection(tabId, event) {
+        // Stop propagation to prevent triggering tab switch
+        if (event) {
+          event.stopPropagation();
+        }
         if (state.selectedTabs.has(tabId)) {
           state.selectedTabs.delete(tabId);
         } else {
@@ -691,11 +725,23 @@
         tabList.innerHTML = '';
         state.activeTabs.forEach((tab, tabId) => {
           const isSelected = state.selectedTabs.has(tabId);
+          const isCurrent = state.activeTabId === tabId;
           const tabEl = document.createElement('div');
-          tabEl.className = `tab-item ${isSelected ? 'active' : ''}`;
+
+          // Add classes for visual states
+          const classes = ['tab-item'];
+          if (isSelected) classes.push('active');
+          if (isCurrent) classes.push('current');
+          tabEl.className = classes.join(' ');
+
+          // Create tab content with checkbox and title
+          const title = tab.title || 'Untitled';
+          const currentIndicator = isCurrent ? '👁 ' : '';
+
           tabEl.innerHTML = `
-            <div onclick="toggleTabSelection('${tabId}')" style="flex: 1; cursor: pointer;">
-              ${isSelected ? '✓' : '○'} ${tab.title || 'Untitled'}
+            <div style="flex: 1; cursor: pointer; display: flex; align-items: center; gap: 8px;" onclick="switchTab('${tabId}')">
+              <input type="checkbox" ${isSelected ? 'checked' : ''} onclick="toggleTabSelection('${tabId}', event)" style="cursor: pointer;" />
+              <span>${currentIndicator}${title}</span>
             </div>
             <button onclick="closeTab('${tabId}')" class="button-small">Close</button>
           `;
@@ -737,6 +783,16 @@
             renderTabs();
             console.log(`Updated tab ${tabId} title to: ${title}`);
           }
+        });
+      }
+
+      // Listen for active tab changes from main process
+      if (window.electronAPI && window.electronAPI.onActiveTabChanged) {
+        window.electronAPI.onActiveTabChanged((data) => {
+          const { tabId } = data;
+          state.activeTabId = tabId;
+          renderTabs();
+          console.log(`Active tab changed to: ${tabId}`);
         });
       }
 

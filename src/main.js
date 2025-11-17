@@ -8,6 +8,7 @@ let mainWindow;
 let chatView; // Reference to chat UI view for sending updates
 let persistentSession; // Persistent session for localStorage
 const contentViews = new Map();
+let activeTabId = null; // Track currently visible tab
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
 
@@ -90,10 +91,20 @@ function createWindow() {
       const tabId = generateId();
       contentViews.set(tabId, contentView);
 
+      // Listen for various load events to help debug loading issues
+      contentView.webContents.on('did-start-loading', () => {
+        console.log(`Tab ${tabId} started loading: ${url}`);
+      });
+
+      contentView.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.error(`Tab ${tabId} failed to load: ${errorDescription} (${errorCode}) - ${validatedURL}`);
+      });
+
       // Listen for page load completion to update title
       contentView.webContents.on('did-finish-load', () => {
         const title = contentView.webContents.getTitle();
-        console.log(`Tab ${tabId} finished loading: ${title}`);
+        const currentUrl = contentView.webContents.getURL();
+        console.log(`Tab ${tabId} finished loading: ${title} (URL: ${currentUrl})`);
 
         // Send title update to chat UI
         if (chatView && chatView.webContents) {
@@ -111,11 +122,25 @@ function createWindow() {
         }
       });
 
+      // Listen for DOM ready (fires before did-finish-load)
+      contentView.webContents.on('dom-ready', () => {
+        const title = contentView.webContents.getTitle();
+        console.log(`Tab ${tabId} DOM ready: ${title}`);
+      });
+
       // Load the URL or PDF
       await contentView.webContents.loadURL(url);
 
+      // Set as active tab if it's the first tab
+      if (!activeTabId) {
+        activeTabId = tabId;
+        if (chatView && chatView.webContents) {
+          chatView.webContents.send('active-tab-changed', { tabId });
+        }
+      }
+
       console.log(`Opened tab ${tabId} with URL: ${url}`);
-      return { id: tabId, url };
+      return { id: tabId, url, isActive: tabId === activeTabId };
     } catch (error) {
       console.error('Error opening tab:', error);
       throw error;
@@ -130,12 +155,58 @@ function createWindow() {
         mainWindow.contentView.removeChildView(view);
         view.webContents.destroy();
         contentViews.delete(tabId);
+
+        // If closing active tab, switch to another tab or clear activeTabId
+        if (activeTabId === tabId) {
+          const remainingTabs = Array.from(contentViews.keys());
+          if (remainingTabs.length > 0) {
+            // Switch to the first remaining tab
+            const newActiveTabId = remainingTabs[0];
+            activeTabId = newActiveTabId;
+            if (chatView && chatView.webContents) {
+              chatView.webContents.send('active-tab-changed', { tabId: newActiveTabId });
+            }
+          } else {
+            activeTabId = null;
+          }
+        }
+
         console.log(`Closed tab ${tabId}`);
         return { success: true };
       }
       return { success: false, error: 'Tab not found' };
     } catch (error) {
       console.error('Error closing tab:', error);
+      throw error;
+    }
+  });
+
+  // Handle IPC: Switch to a different tab
+  ipcMain.handle('switch-tab', (event, tabId) => {
+    try {
+      const view = contentViews.get(tabId);
+      if (!view) {
+        return { success: false, error: 'Tab not found' };
+      }
+
+      // Remove and re-add the view to bring it to front
+      // This is necessary because WebContentsView doesn't have a built-in z-index or bringToFront method
+      mainWindow.contentView.removeChildView(view);
+      mainWindow.contentView.addChildView(view);
+      view.setBounds({ x: 400, y: 0, width: 1000, height: 900 });
+
+      // Update active tab tracking
+      activeTabId = tabId;
+
+      // Notify chat UI of the change
+      if (chatView && chatView.webContents) {
+        chatView.webContents.send('active-tab-changed', { tabId });
+      }
+
+      console.log(`Switched to tab ${tabId}`);
+      return { success: true, tabId };
+    } catch (error) {
+      console.error('Error switching tab:', error);
       throw error;
     }
   });
