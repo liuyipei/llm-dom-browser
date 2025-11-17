@@ -71,8 +71,13 @@ Root:
 ### Installation
 
 ```bash
+npm install
+```
+
+If you encounter issues with install scripts, you can try:
+
+```bash
 npm install --ignore-scripts
-npm install  # Or skip this if scripts fail; Electron binaries require special handling
 ```
 
 ### Running the App
@@ -86,6 +91,157 @@ Development mode with hot reload:
 ```bash
 npm run dev
 ```
+
+## Windows Setup Guide
+
+If you're new to development on Windows, follow these detailed instructions:
+
+### Prerequisites for Windows 11
+
+1. **Install Node.js**
+   - Download Node.js 22.x or later from [nodejs.org](https://nodejs.org/)
+   - Use the Windows Installer (.msi) - 64-bit recommended
+   - During installation, check the box for "Automatically install the necessary tools"
+   - After installation, open a new Command Prompt or PowerShell window
+   - Verify installation:
+     ```powershell
+     node --version
+     npm --version
+     ```
+
+2. **Install Git** (optional, for cloning the repository)
+   - Download from [git-scm.com](https://git-scm.com/download/win)
+   - Use default installation options
+
+3. **Choose a Terminal**
+   - **PowerShell** (recommended, built into Windows 11)
+   - **Command Prompt** (cmd.exe)
+   - **Windows Terminal** (modern option, available from Microsoft Store)
+
+### Installation on Windows
+
+1. **Open PowerShell or Command Prompt**
+   - Press `Win + X` and select "Terminal" or "PowerShell"
+   - Or search for "PowerShell" in the Start menu
+
+2. **Navigate to the project directory**
+   ```powershell
+   cd path\to\llm-dom-browser
+   ```
+
+3. **Install dependencies**
+   ```powershell
+   npm install
+   ```
+
+   **Note**: On Windows, Electron download might take a few minutes depending on your internet connection. The installer is ~150 MB.
+
+   **If you encounter errors**, try:
+   ```powershell
+   npm cache clean --force
+   npm install
+   ```
+
+### Running on Windows
+
+```powershell
+npm start
+```
+
+Or for development mode:
+
+```powershell
+npm run dev
+```
+
+### Building for Windows Distribution
+
+To create a Windows installer:
+
+```powershell
+npm run build:win
+```
+
+This creates an installer in the `dist` folder:
+- `LLM DOM Browser Setup x.x.x.exe` (NSIS installer)
+
+You can also build for all platforms (if you have the prerequisites):
+
+```powershell
+npm run build
+```
+
+**Platform-specific builds:**
+- `npm run build:win` - Windows installer
+- `npm run build:mac` - macOS DMG (requires macOS)
+- `npm run build:linux` - Linux AppImage and .deb
+
+### Windows-Specific Troubleshooting
+
+#### Issue: "Execution of scripts is disabled on this system"
+
+If you see this error when running npm commands in PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Then confirm with `Y`.
+
+#### Issue: npm install fails with network errors
+
+Try using the official npm registry:
+
+```powershell
+npm config set registry https://registry.npmjs.org/
+npm install
+```
+
+#### Issue: Antivirus blocking Electron
+
+Some antivirus software may flag Electron applications. You may need to:
+1. Add the project folder to your antivirus exclusions
+2. Temporarily disable real-time protection during `npm install`
+3. After installation, re-enable your antivirus
+
+#### Issue: "node-gyp" errors during installation
+
+The `pdf-parse` package requires native modules. If you see build errors:
+
+1. Install Windows Build Tools (may require administrator):
+   ```powershell
+   npm install --global windows-build-tools
+   ```
+
+2. Or install Visual Studio Build Tools manually:
+   - Download [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/)
+   - Select "Desktop development with C++"
+
+#### Issue: Path too long errors
+
+Windows has a 260-character path limit by default. To fix:
+
+1. Enable long paths in Windows (requires administrator):
+   - Run as administrator:
+     ```powershell
+     New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+     ```
+   - Or use Group Policy: `Computer Configuration → Administrative Templates → System → Filesystem → Enable Win32 long paths`
+
+2. Or move the project to a shorter path like `C:\projects\llm-browser`
+
+### Windows File Paths in Code
+
+The application handles Windows paths automatically. When testing:
+- Use forward slashes in code: `src/main.js` (Node.js converts automatically)
+- Backslashes work in terminal: `src\main.js`
+- For file:// URLs, the app converts Windows paths correctly
+
+### Windows Performance Tips
+
+- **First launch**: May take 10-15 seconds while Electron initializes
+- **Subsequent launches**: Should be faster (~3-5 seconds)
+- **Windows Defender**: May scan the app on first run, causing delays
 
 ## Key Design Decisions
 
@@ -241,11 +397,28 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## Building for Distribution
 
+Build for all platforms (current OS):
+
 ```bash
 npm run build
 ```
 
-This creates installers for macOS, Windows, and Linux using `electron-builder`.
+Or build for specific platforms:
+
+```bash
+npm run build:win     # Windows installer (NSIS)
+npm run build:mac     # macOS DMG (Intel + Apple Silicon)
+npm run build:linux   # Linux AppImage + .deb package
+```
+
+Output will be in the `dist/` directory.
+
+**Cross-platform building notes:**
+- **Windows**: Can build Windows installers on any OS
+- **macOS**: Building .dmg requires macOS (code signing requires Apple Developer account)
+- **Linux**: Can build Linux packages on any OS
+
+This uses `electron-builder` with configurations for all three platforms.
 
 ## Development Tips
 
