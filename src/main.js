@@ -359,6 +359,54 @@ function createWindow() {
       contentView.webContents.on('dom-ready', () => {
         const title = contentView.webContents.getTitle();
         console.log(`Tab ${tabId} DOM ready: ${title}`);
+
+        // Inject scrollbar CSS directly from main process
+        // This bypasses CSP and sandbox restrictions
+        contentView.webContents.insertCSS(`
+          /* Force scrollbars to be visible with better styling */
+          ::-webkit-scrollbar {
+            width: 16px !important;
+            height: 16px !important;
+          }
+
+          ::-webkit-scrollbar-track {
+            background: #e0e0e0 !important;
+            border-left: 2px solid #ccc !important;
+          }
+
+          ::-webkit-scrollbar-thumb {
+            background: #666 !important;
+            border: 4px solid #e0e0e0 !important;
+            min-height: 40px !important;
+          }
+
+          ::-webkit-scrollbar-thumb:hover {
+            background: #444 !important;
+          }
+
+          ::-webkit-scrollbar-corner {
+            background: #e0e0e0 !important;
+          }
+
+          /* Force scrollbar to always show */
+          html {
+            overflow-y: scroll !important;
+            overflow-x: auto !important;
+          }
+
+          body {
+            overflow: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 100vh !important;
+          }
+
+          * {
+            scrollbar-width: auto !important;
+          }
+        `).catch(err => {
+          console.error('Failed to inject scrollbar CSS:', err);
+        });
       });
 
       // Load the URL or PDF
