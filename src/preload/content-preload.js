@@ -166,48 +166,60 @@ contextBridge.exposeInMainWorld('contentAPI', {
 function injectScrollbarStyles() {
   try {
     const style = document.createElement('style');
+    style.id = 'llm-browser-scrollbar-style';
     style.textContent = `
-      /* Force scrollbars to be visible */
+      /* Force scrollbars to be visible - important flags to override any site styles */
       ::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
+        width: 14px !important;
+        height: 14px !important;
+        -webkit-appearance: none !important;
       }
 
       ::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 6px;
+        background: #f1f1f1 !important;
+        border-radius: 0px !important;
+        border-left: 1px solid #ddd !important;
       }
 
       ::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 6px;
+        background: #888 !important;
+        border-radius: 0px !important;
+        border: 1px solid #777 !important;
       }
 
       ::-webkit-scrollbar-thumb:hover {
-        background: #555;
+        background: #555 !important;
       }
 
       /* Ensure scrollbar is always visible, not just on hover */
       html {
-        overflow-y: scroll;
-        scrollbar-gutter: stable;
+        overflow-y: scroll !important;
+        scrollbar-gutter: stable !important;
+        scrollbar-width: auto !important; /* For Firefox */
       }
 
       body {
-        overflow-y: auto;
+        overflow-y: auto !important;
+      }
+
+      /* Force non-overlay scrollbars on body */
+      html, body {
+        -webkit-overflow-scrolling: auto !important;
       }
     `;
 
     // Wait for DOM to be ready before injecting
     if (document.head) {
       document.head.appendChild(style);
+      console.log('[LLM Browser] Scrollbar styles injected successfully');
     } else {
       document.addEventListener('DOMContentLoaded', () => {
         document.head.appendChild(style);
+        console.log('[LLM Browser] Scrollbar styles injected successfully (after DOMContentLoaded)');
       });
     }
   } catch (error) {
-    console.error('Error injecting scrollbar styles:', error);
+    console.error('[LLM Browser] Error injecting scrollbar styles:', error);
   }
 }
 

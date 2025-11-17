@@ -4,12 +4,17 @@ const fs = require('fs');
 const PDFService = require('./services/pdf-service');
 const LLMOrchestrator = require('./services/llm-orchestrator');
 
+// Disable overlay scrollbars to ensure classic scrollbars are always visible
+// This must be set before app.whenReady()
+app.commandLine.appendSwitch('disable-features', 'OverlayScrollbar');
+
 let mainWindow;
 let chatView; // Reference to chat UI view for sending updates
 let persistentSession; // Persistent session for localStorage
 const contentViews = new Map();
 let activeTabId = null; // Track currently visible tab
 let chatWidth = 400; // Default chat sidebar width, can be adjusted by user
+const SPLITTER_WIDTH = 5; // Width of the resizer/splitter
 const llmOrchestrator = new LLMOrchestrator();
 const pdfService = new PDFService();
 
@@ -33,22 +38,28 @@ function generateId() {
 
 /**
  * Update all view bounds based on current window size
+ * Uses DPI-safe rounding to avoid scrollbar clipping on Windows
  */
 function updateViewBounds() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
-  const bounds = mainWindow.getBounds();
-  const contentWidth = bounds.width - chatWidth;
+  // Use getContentBounds() to exclude window frame (critical for Windows)
+  const { width, height } = mainWindow.getContentBounds();
+
+  // Round chat width only, give remainder to content view (DPI-safe)
+  const leftWidth = Math.round(chatWidth);
+  const rightWidth = width - leftWidth; // Guaranteed to consume all remaining pixels
 
   // Update chat view bounds
   if (chatView && !chatView.webContents.isDestroyed()) {
-    chatView.setBounds({ x: 0, y: 0, width: chatWidth, height: bounds.height });
+    chatView.setBounds({ x: 0, y: 0, width: leftWidth, height });
   }
 
   // Update all content view bounds
+  // rightWidth includes any rounding remainder, preventing scrollbar clipping
   contentViews.forEach((view, tabId) => {
     if (view && !view.webContents.isDestroyed()) {
-      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height });
+      view.setBounds({ x: leftWidth, y: 0, width: rightWidth, height });
     }
   });
 }
@@ -291,10 +302,12 @@ function createWindow() {
   // Set initial bounds for views
   updateViewBounds();
 
-  // Add resize event listener to dynamically update view bounds
-  mainWindow.on('resize', () => {
-    updateViewBounds();
-  });
+  // Add event listeners for all layout changes (Windows DPI-safe)
+  mainWindow.on('resize', updateViewBounds);
+  mainWindow.on('maximize', updateViewBounds);
+  mainWindow.on('unmaximize', updateViewBounds);
+  mainWindow.on('enter-full-screen', updateViewBounds);
+  mainWindow.on('leave-full-screen', updateViewBounds);
 
   // Register the content views map with the LLM orchestrator
   llmOrchestrator.setContentViews(contentViews);
@@ -317,9 +330,8 @@ function createWindow() {
       const tabId = generateId();
       contentViews.set(tabId, contentView);
 
-      // Set bounds based on current window size
-      const bounds = mainWindow.getBounds();
-      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      // Set bounds using DPI-safe layout function
+      updateViewBounds();
 
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
@@ -427,10 +439,8 @@ function createWindow() {
       mainWindow.contentView.removeChildView(view);
       mainWindow.contentView.addChildView(view);
 
-      // Set bounds based on current window size
-      const bounds = mainWindow.getBounds();
-      const chatWidth = 400;
-      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
+      // Set bounds using DPI-safe layout function
+      updateViewBounds();
 
       // Update active tab tracking
       activeTabId = tabId;
@@ -651,9 +661,9 @@ function createWindow() {
   ipcMain.handle('update-chat-width', (event, newWidth) => {
     try {
       // Constrain width to reasonable bounds (200px min, 80% of window max)
-      const bounds = mainWindow.getBounds();
+      const { width } = mainWindow.getContentBounds();
       const minWidth = 200;
-      const maxWidth = Math.floor(bounds.width * 0.8);
+      const maxWidth = Math.floor(width * 0.8);
 
       chatWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
       updateViewBounds();
