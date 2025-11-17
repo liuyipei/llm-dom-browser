@@ -220,4 +220,64 @@ contextBridge.exposeInMainWorld('contentAPI', {
   version: '1.0.0'
 });
 
+/**
+ * Inject CSS to ensure scrollbars are always visible
+ * This helps users see scroll position and supports mice without scroll wheels
+ */
+function injectScrollbarStyles() {
+  try {
+    const style = document.createElement('style');
+    style.textContent = `
+      /* Force scrollbars to be visible */
+      ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 6px;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 6px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+
+      /* Ensure scrollbar is always visible, not just on hover */
+      html {
+        overflow-y: scroll;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        overflow-y: auto;
+      }
+    `;
+
+    // Wait for DOM to be ready before injecting
+    if (document.head) {
+      document.head.appendChild(style);
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.head.appendChild(style);
+      });
+    }
+  } catch (error) {
+    console.error('Error injecting scrollbar styles:', error);
+  }
+}
+
+// Inject styles when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectScrollbarStyles);
+} else {
+  // DOM already loaded
+  injectScrollbarStyles();
+}
+
 console.log('Content preload script loaded');
