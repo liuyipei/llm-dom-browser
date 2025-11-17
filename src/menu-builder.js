@@ -8,8 +8,7 @@ class MenuBuilder {
     this.chatView = options.chatView;
     this.contentViews = options.contentViews;
     this.mainWindow = options.mainWindow;
-    this.getActiveTabId = options.getActiveTabId;
-    this.closeTab = options.closeTab;
+    this.tabManager = options.tabManager;
   }
 
   /**
@@ -19,8 +18,7 @@ class MenuBuilder {
     if (options.chatView) this.chatView = options.chatView;
     if (options.contentViews) this.contentViews = options.contentViews;
     if (options.mainWindow) this.mainWindow = options.mainWindow;
-    if (options.getActiveTabId) this.getActiveTabId = options.getActiveTabId;
-    if (options.closeTab) this.closeTab = options.closeTab;
+    if (options.tabManager) this.tabManager = options.tabManager;
   }
 
   /**
@@ -66,13 +64,72 @@ class MenuBuilder {
             accelerator: 'CmdOrCtrl+W',
             click: () => {
               // Close active tab
-              if (this.closeTab) {
-                this.closeTab();
+              if (this.tabManager) {
+                this.tabManager.closeTab();
+              }
+            }
+          },
+          {
+            label: 'Reopen Closed Tab',
+            accelerator: 'CmdOrCtrl+Shift+T',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.reopenLastClosedTab();
               }
             }
           },
           { type: 'separator' },
-          isMac ? { role: 'close' } : { role: 'quit' }
+          {
+            label: 'Next Tab',
+            accelerator: isMac ? 'Cmd+Option+Right' : 'Ctrl+Tab',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.nextTab();
+              }
+            }
+          },
+          {
+            label: 'Previous Tab',
+            accelerator: isMac ? 'Cmd+Option+Left' : 'Ctrl+Shift+Tab',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.previousTab();
+              }
+            }
+          },
+          { type: 'separator' },
+          ...(Array.from({ length: 8 }, (_, i) => ({
+            label: `Jump to Tab ${i + 1}`,
+            accelerator: `CmdOrCtrl+${i + 1}`,
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.jumpToTab(i + 1);
+              }
+            }
+          }))),
+          {
+            label: 'Jump to Last Tab',
+            accelerator: 'CmdOrCtrl+9',
+            click: () => {
+              if (this.tabManager) {
+                const tabs = this.tabManager.getAllTabs();
+                if (tabs.length > 0) {
+                  this.tabManager.jumpToTab(tabs.length);
+                }
+              }
+            }
+          },
+          { type: 'separator' },
+          {
+            label: 'Close Window',
+            accelerator: 'CmdOrCtrl+Shift+W',
+            click: () => {
+              if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.close();
+              }
+            }
+          },
+          isMac ? { role: 'close' } : { role: 'quit', accelerator: 'Ctrl+Q' }
         ]
       },
       // Edit menu
@@ -101,7 +158,101 @@ class MenuBuilder {
             { role: 'delete' },
             { type: 'separator' },
             { role: 'selectAll' }
-          ])
+          ]),
+          { type: 'separator' },
+          {
+            label: 'Find...',
+            accelerator: 'CmdOrCtrl+F',
+            click: () => {
+              const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
+              if (activeTabId && this.contentViews) {
+                const view = this.contentViews.get(activeTabId);
+                if (view && view.webContents) {
+                  view.webContents.executeJavaScript(`
+                    window.find();
+                  `);
+                }
+              }
+            }
+          },
+          {
+            label: 'Find Next',
+            accelerator: isMac ? 'Cmd+G' : 'F3',
+            click: () => {
+              const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
+              if (activeTabId && this.contentViews) {
+                const view = this.contentViews.get(activeTabId);
+                if (view && view.webContents) {
+                  view.webContents.findInPage('', { forward: true, findNext: true });
+                }
+              }
+            }
+          }
+        ]
+      },
+      // Navigation menu
+      {
+        label: 'Navigation',
+        submenu: [
+          {
+            label: 'Back',
+            accelerator: isMac ? 'Cmd+[' : 'Alt+Left',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.goBack();
+              }
+            }
+          },
+          {
+            label: 'Forward',
+            accelerator: isMac ? 'Cmd+]' : 'Alt+Right',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.goForward();
+              }
+            }
+          },
+          { type: 'separator' },
+          {
+            label: 'Reload',
+            accelerator: isMac ? 'Cmd+R' : 'F5',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.reloadTab(false);
+              }
+            }
+          },
+          {
+            label: 'Hard Reload',
+            accelerator: 'CmdOrCtrl+Shift+R',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.reloadTab(true);
+              }
+            }
+          },
+          {
+            label: 'Stop',
+            accelerator: isMac ? 'Cmd+.' : 'Esc',
+            click: () => {
+              if (this.tabManager) {
+                this.tabManager.stopLoading();
+              }
+            }
+          },
+          { type: 'separator' },
+          {
+            label: 'Focus Address Bar',
+            accelerator: 'CmdOrCtrl+L',
+            click: () => {
+              if (this.chatView && this.chatView.webContents) {
+                this.chatView.webContents.executeJavaScript(`
+                  document.getElementById('urlInput')?.focus();
+                  document.getElementById('urlInput')?.select();
+                `);
+              }
+            }
+          }
         ]
       },
       // View menu
@@ -109,23 +260,10 @@ class MenuBuilder {
         label: 'View',
         submenu: [
           {
-            label: 'Toggle Chat DevTools',
-            accelerator: 'F12',
+            label: 'Developer Tools',
+            accelerator: isMac ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
             click: () => {
-              if (this.chatView && this.chatView.webContents) {
-                if (this.chatView.webContents.isDevToolsOpened()) {
-                  this.chatView.webContents.closeDevTools();
-                } else {
-                  this.chatView.webContents.openDevTools({ mode: 'detach' });
-                }
-              }
-            }
-          },
-          {
-            label: 'Toggle Content DevTools',
-            accelerator: 'CmdOrCtrl+Shift+C',
-            click: () => {
-              const activeTabId = this.getActiveTabId ? this.getActiveTabId() : null;
+              const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
               if (activeTabId && this.contentViews) {
                 const view = this.contentViews.get(activeTabId);
                 if (view && view.webContents) {
@@ -138,33 +276,35 @@ class MenuBuilder {
               }
             }
           },
-          { type: 'separator' },
           {
-            label: 'Reload Chat UI',
-            accelerator: 'CmdOrCtrl+R',
+            label: 'Chat DevTools',
+            accelerator: 'F12',
             click: () => {
               if (this.chatView && this.chatView.webContents) {
-                this.chatView.webContents.reload();
-              }
-            }
-          },
-          {
-            label: 'Reload Content Tab',
-            accelerator: 'CmdOrCtrl+Shift+R',
-            click: () => {
-              const activeTabId = this.getActiveTabId ? this.getActiveTabId() : null;
-              if (activeTabId && this.contentViews) {
-                const view = this.contentViews.get(activeTabId);
-                if (view && view.webContents) {
-                  view.webContents.reload();
+                if (this.chatView.webContents.isDevToolsOpened()) {
+                  this.chatView.webContents.closeDevTools();
+                } else {
+                  this.chatView.webContents.openDevTools({ mode: 'detach' });
                 }
               }
             }
           },
           { type: 'separator' },
-          { role: 'resetZoom' },
-          { role: 'zoomIn' },
-          { role: 'zoomOut' },
+          {
+            label: 'Zoom In',
+            accelerator: 'CmdOrCtrl+Plus',
+            role: 'zoomIn'
+          },
+          {
+            label: 'Zoom Out',
+            accelerator: 'CmdOrCtrl+-',
+            role: 'zoomOut'
+          },
+          {
+            label: 'Actual Size',
+            accelerator: 'CmdOrCtrl+0',
+            role: 'resetZoom'
+          },
           { type: 'separator' },
           { role: 'togglefullscreen' }
         ]
@@ -173,7 +313,11 @@ class MenuBuilder {
       {
         label: 'Window',
         submenu: [
-          { role: 'minimize' },
+          {
+            label: 'Minimize',
+            accelerator: isMac ? 'Cmd+M' : undefined,
+            role: 'minimize'
+          },
           { role: 'zoom' },
           ...(isMac ? [
             { type: 'separator' },
