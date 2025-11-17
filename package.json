@@ -1,0 +1,19 @@
+{
+  "name": "llm-dom-browser",
+  "version": "1.0.0",
+  "description": "MVP: DOM Tree access for LLMs using Electron",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "test": "jest"
+  },
+  "dependencies": {
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

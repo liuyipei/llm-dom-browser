@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM-DOM Browser Chat</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        background: #f5f5f5;
+        color: #333;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        background: #2c3e50;
+        color: white;
+        padding: 16px;
+        text-align: center;
+        border-bottom: 1px solid #34495e;
+      }
+
+      .header h1 {
+        font-size: 18px;
+        margin-bottom: 4px;
+      }
+
+      .header p {
+        font-size: 12px;
+        opacity: 0.8;
+      }
+
+      .chat-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .message {
+        padding: 12px;
+        border-radius: 8px;
+        max-width: 100%;
+        word-wrap: break-word;
+      }
+
+      .message.user {
+        background: #3498db;
+        color: white;
+        align-self: flex-end;
+        margin-left: 20px;
+      }
+
+      .message.assistant {
+        background: #ecf0f1;
+        color: #333;
+        align-self: flex-start;
+        margin-right: 20px;
+      }
+
+      .message.system {
+        background: #f39c12;
+        color: white;
+        text-align: center;
+        font-size: 12px;
+        align-self: center;
+      }
+
+      .tabs-section {
+        border-top: 1px solid #ddd;
+        padding: 12px;
+        background: #fafafa;
+        max-height: 150px;
+        overflow-y: auto;
+      }
+
+      .tabs-section h3 {
+        font-size: 12px;
+        margin-bottom: 8px;
+        color: #666;
+        text-transform: uppercase;
+      }
+
+      .tab-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .tab-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 8px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .tab-item:hover {
+        background: #f0f0f0;
+      }
+
+      .tab-item.active {
+        background: #3498db;
+        color: white;
+        border-color: #3498db;
+      }
+
+      .tab-item button {
+        background: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        padding: 2px 6px;
+        font-size: 10px;
+        cursor: pointer;
+      }
+
+      .tab-item button:hover {
+        background: #c0392b;
+      }
+
+      .input-section {
+        border-top: 1px solid #ddd;
+        padding: 12px;
+        background: white;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .input-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      input[type='text'],
+      input[type='password'],
+      input[type='file'] {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+
+      button {
+        padding: 8px 12px;
+        background: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      button:hover {
+        background: #229954;
+      }
+
+      button:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+      }
+
+      .button-small {
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+
+      .status {
+        font-size: 11px;
+        color: #666;
+        padding: 4px 0;
+      }
+
+      .error {
+        color: #e74c3c;
+      }
+
+      .success {
+        color: #27ae60;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🤖 LLM-DOM Browser</h1>
+      <p>Analyze web content with AI</p>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+      <div class="message system">
+        Welcome to LLM-DOM Browser. Open tabs and ask questions about their content!
+      </div>
+    </div>
+
+    <div class="tabs-section">
+      <h3>📑 Open Tabs</h3>
+      <div class="tab-list" id="tabList"></div>
+    </div>
+
+    <div class="input-section">
+      <div class="input-row">
+        <input type="text" id="urlInput" placeholder="Enter URL or file path..." />
+        <button id="openBtn" class="button-small">Open</button>
+      </div>
+
+      <div class="input-row">
+        <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
+        <button id="uploadBtn" class="button-small">Upload</button>
+      </div>
+
+      <div class="input-row">
+        <input type="password" id="apiKeyInput" placeholder="OpenAI/Claude API Key..." />
+      </div>
+
+      <div class="input-row">
+        <input type="text" id="queryInput" placeholder="Ask a question..." />
+        <button id="sendBtn" class="button-small">Send</button>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <script>
+      // UI State
+      const state = {
+        activeTabs: new Map(),
+        selectedTabs: new Set(),
+        isLoading: false
+      };
+
+      // DOM Elements
+      const chatContainer = document.getElementById('chatContainer');
+      const tabList = document.getElementById('tabList');
+      const urlInput = document.getElementById('urlInput');
+      const openBtn = document.getElementById('openBtn');
+      const fileInput = document.getElementById('fileInput');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const queryInput = document.getElementById('queryInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const statusEl = document.getElementById('status');
+
+      /**
+       * Add message to chat
+       */
+      function addMessage(text, type = 'assistant') {
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${type}`;
+        messageEl.textContent = text;
+        chatContainer.appendChild(messageEl);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+
+      /**
+       * Update status message
+       */
+      function updateStatus(text, type = 'info') {
+        statusEl.textContent = text;
+        statusEl.className = `status ${type}`;
+      }
+
+      /**
+       * Open a tab with URL
+       */
+      async function handleOpenTab() {
+        const url = urlInput.value.trim();
+        if (!url) {
+          updateStatus('Please enter a URL', 'error');
+          return;
+        }
+
+        try {
+          setLoading(true);
+          updateStatus('Opening tab...');
+
+          // Ensure URL has protocol
+          let finalUrl = url;
+          if (!url.startsWith('http') && !url.startsWith('file')) {
+            finalUrl = 'https://' + url;
+          }
+
+          const result = await window.electronAPI.openTab(finalUrl);
+          state.activeTabs.set(result.id, { url: result.url, title: 'Loading...' });
+
+          addMessage(`✅ Opened: ${finalUrl}`, 'system');
+          updateStatus('Tab opened successfully', 'success');
+          urlInput.value = '';
+          renderTabs();
+        } catch (error) {
+          updateStatus(`Error: ${error.message}`, 'error');
+          addMessage(`❌ Error: ${error.message}`, 'system');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      /**
+       * Upload a file
+       */
+      async function handleUploadFile() {
+        const file = fileInput.files[0];
+        if (!file) {
+          updateStatus('Please select a file', 'error');
+          return;
+        }
+
+        try {
+          setLoading(true);
+          updateStatus('Uploading file...');
+
+          // In a real app, you'd use a file dialog here
+          // For now, we'll mock it
+          const result = await window.electronAPI.uploadFile(file.name, file.name);
+          state.activeTabs.set(result.tabId, { url: file.name, title: result.fileName });
+
+          addMessage(`📄 Uploaded: ${file.name}`, 'system');
+          updateStatus('File uploaded successfully', 'success');
+          fileInput.value = '';
+          renderTabs();
+        } catch (error) {
+          updateStatus(`Error: ${error.message}`, 'error');
+          addMessage(`❌ Error: ${error.message}`, 'system');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      /**
+       * Send query to LLM
+       */
+      async function handleSendQuery() {
+        const query = queryInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        const tabIds = Array.from(state.selectedTabs);
+
+        if (!query) {
+          updateStatus('Please enter a question', 'error');
+          return;
+        }
+
+        if (!apiKey) {
+          updateStatus('Please enter API key', 'error');
+          return;
+        }
+
+        if (tabIds.length === 0) {
+          updateStatus('Please select at least one tab', 'error');
+          return;
+        }
+
+        try {
+          setLoading(true);
+          updateStatus('Analyzing content...');
+          addMessage(`Q: ${query}`, 'user');
+
+          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey);
+
+          if (result.success) {
+            addMessage(result.response, 'assistant');
+            updateStatus(
+              `Response generated (${result.tokensUsed} tokens used)`,
+              'success'
+            );
+          } else {
+            updateStatus(`Error: ${result.error}`, 'error');
+            addMessage(`❌ Error: ${result.error}`, 'system');
+          }
+
+          queryInput.value = '';
+        } catch (error) {
+          updateStatus(`Error: ${error.message}`, 'error');
+          addMessage(`❌ Error: ${error.message}`, 'system');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      /**
+       * Close a tab
+       */
+      async function closeTab(tabId) {
+        try {
+          await window.electronAPI.closeTab(tabId);
+          state.activeTabs.delete(tabId);
+          state.selectedTabs.delete(tabId);
+          addMessage(`Closed tab`, 'system');
+          renderTabs();
+        } catch (error) {
+          updateStatus(`Error closing tab: ${error.message}`, 'error');
+        }
+      }
+
+      /**
+       * Toggle tab selection
+       */
+      function toggleTabSelection(tabId) {
+        if (state.selectedTabs.has(tabId)) {
+          state.selectedTabs.delete(tabId);
+        } else {
+          state.selectedTabs.add(tabId);
+        }
+        renderTabs();
+      }
+
+      /**
+       * Render tabs list
+       */
+      function renderTabs() {
+        tabList.innerHTML = '';
+        state.activeTabs.forEach((tab, tabId) => {
+          const isSelected = state.selectedTabs.has(tabId);
+          const tabEl = document.createElement('div');
+          tabEl.className = `tab-item ${isSelected ? 'active' : ''}`;
+          tabEl.innerHTML = `
+            <div onclick="toggleTabSelection('${tabId}')" style="flex: 1; cursor: pointer;">
+              ${isSelected ? '✓' : '○'} ${tab.title || 'Untitled'}
+            </div>
+            <button onclick="closeTab('${tabId}')" class="button-small">Close</button>
+          `;
+          tabList.appendChild(tabEl);
+        });
+      }
+
+      /**
+       * Set loading state
+       */
+      function setLoading(loading) {
+        state.isLoading = loading;
+        openBtn.disabled = loading;
+        uploadBtn.disabled = loading;
+        sendBtn.disabled = loading;
+        urlInput.disabled = loading;
+        queryInput.disabled = loading;
+      }
+
+      // Event Listeners
+      openBtn.addEventListener('click', handleOpenTab);
+      uploadBtn.addEventListener('click', handleUploadFile);
+      sendBtn.addEventListener('click', handleSendQuery);
+      urlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleOpenTab();
+      });
+      queryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSendQuery();
+      });
+
+      // Initialize
+      updateStatus('Ready', 'success');
+      addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
+    </script>
+  </body>
+</html>
