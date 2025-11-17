@@ -12,6 +12,7 @@ class TabManager {
     this.contentViews = options.contentViews || new Map();
     this.activeTabId = null;
     this.updateViewBounds = options.updateViewBounds;
+    this.closedTabs = []; // Track closed tabs for reopening
   }
 
   /**
@@ -136,6 +137,15 @@ class TabManager {
 
       const view = this.contentViews.get(targetTabId);
       if (view) {
+        // Save tab info for potential reopening (limit to last 10 closed tabs)
+        const url = view.webContents.getURL();
+        if (url) {
+          this.closedTabs.push({ url, closedAt: Date.now() });
+          if (this.closedTabs.length > 10) {
+            this.closedTabs.shift(); // Remove oldest
+          }
+        }
+
         this.mainWindow.contentView.removeChildView(view);
         view.webContents.destroy();
         this.contentViews.delete(targetTabId);
@@ -206,6 +216,56 @@ class TabManager {
    */
   getAllTabs() {
     return Array.from(this.contentViews.keys());
+  }
+
+  /**
+   * Get the next tab ID (wraps around)
+   */
+  getNextTabId() {
+    const tabs = this.getAllTabs();
+    if (tabs.length === 0) return null;
+
+    const currentIndex = tabs.indexOf(this.activeTabId);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    return tabs[nextIndex];
+  }
+
+  /**
+   * Get the previous tab ID (wraps around)
+   */
+  getPreviousTabId() {
+    const tabs = this.getAllTabs();
+    if (tabs.length === 0) return null;
+
+    const currentIndex = tabs.indexOf(this.activeTabId);
+    const prevIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1;
+    return tabs[prevIndex];
+  }
+
+  /**
+   * Get tab by index position (0-based)
+   */
+  getTabByIndex(index) {
+    const tabs = this.getAllTabs();
+    return index >= 0 && index < tabs.length ? tabs[index] : null;
+  }
+
+  /**
+   * Reopen the last closed tab
+   */
+  async reopenLastClosedTab() {
+    if (this.closedTabs.length === 0) {
+      return { success: false, error: 'No closed tabs to reopen' };
+    }
+
+    const lastClosed = this.closedTabs.pop();
+    try {
+      const result = await this.openTab(lastClosed.url);
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('Error reopening tab:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   /**
