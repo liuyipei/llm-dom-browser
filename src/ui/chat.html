@@ -266,7 +266,7 @@
         gap: 8px;
         transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
         max-height: 500px;
-        overflow: visible;
+        overflow-y: auto;
       }
 
       .input-section.collapsed {
@@ -498,9 +498,28 @@
         font-family: 'Courier New', Courier, monospace;
         font-size: 0.9em;
       }
+
+      /* Resizer for split pane */
+      .resizer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 5px;
+        height: 100%;
+        cursor: ew-resize;
+        background: transparent;
+        z-index: 9999;
+        transition: background 0.2s ease;
+      }
+
+      .resizer:hover,
+      .resizer.dragging {
+        background: #3498db;
+      }
     </style>
   </head>
   <body>
+    <div class="resizer" id="resizer" title="Drag to resize chat panel"></div>
     <div class="header">
       <button id="menuButton" class="menu-button" title="Toggle menu sections">☰</button>
       <div class="header-content">
@@ -530,6 +549,18 @@
       <div class="input-row">
         <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
         <button id="uploadBtn" class="button-small">Upload</button>
+      </div>
+
+      <div class="input-row">
+        <input type="text" id="queryInput" placeholder="Ask a question..." />
+        <button id="sendBtn" class="button-small">Send</button>
+      </div>
+
+      <div class="input-row">
+        <label>
+          <input type="checkbox" id="includeMediaCheckbox" />
+          Include page screenshot for vision models (512px max, visible area)
+        </label>
       </div>
 
       <div class="input-row">
@@ -578,18 +609,6 @@
           <button id="ollamaPullBtn" class="button-small">Pull Model</button>
         </div>
         <div id="ollamaPullProgress" style="margin-top: 8px; font-size: 12px; color: #aaa;"></div>
-      </div>
-
-      <div class="input-row">
-        <label>
-          <input type="checkbox" id="includeMediaCheckbox" />
-          Include page screenshot for vision models (512px max, visible area)
-        </label>
-      </div>
-
-      <div class="input-row">
-        <input type="text" id="queryInput" placeholder="Ask a question..." />
-        <button id="sendBtn" class="button-small">Send</button>
       </div>
 
       <div class="status" id="status"></div>
@@ -1717,6 +1736,49 @@
         if (apiKey) {
           storage.saveApiKey(provider, apiKey);
           console.log(`Saved API key on beforeunload for provider: ${provider}`);
+        }
+      });
+
+      // Resizer functionality for split pane
+      const resizer = document.getElementById('resizer');
+      let isResizing = false;
+      let startX = 0;
+      let startWidth = 400; // Default chat width
+
+      resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = document.body.clientWidth; // Current chat panel width = window width (we're in the chat view)
+        resizer.classList.add('dragging');
+
+        // Prevent text selection during drag
+        e.preventDefault();
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'ew-resize';
+      });
+
+      document.addEventListener('mousemove', async (e) => {
+        if (!isResizing) return;
+
+        // Calculate new width based on mouse position
+        const newWidth = e.clientX;
+
+        // Update immediately for smooth visual feedback
+        if (window.electronAPI && window.electronAPI.updateChatWidth) {
+          try {
+            await window.electronAPI.updateChatWidth(newWidth);
+          } catch (error) {
+            console.error('Error updating chat width:', error);
+          }
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          resizer.classList.remove('dragging');
+          document.body.style.userSelect = '';
+          document.body.style.cursor = '';
         }
       });
 
