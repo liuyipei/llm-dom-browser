@@ -52,8 +52,13 @@ class LLMOrchestrator {
       // Build the LLM prompt with extracted content
       const prompt = this._buildPrompt(query, contextItems);
 
+      // Track latency
+      const startTime = Date.now();
+
       // Send to LLM API (local or remote)
-      const response = await this._queryRemoteLLM(prompt, apiKey, provider, model, includeMedia, customEndpoint);
+      const llmResult = await this._queryRemoteLLM(prompt, apiKey, provider, model, includeMedia, customEndpoint);
+
+      const latencyMs = Date.now() - startTime;
 
       // Store in history
       this._addToHistory({
@@ -64,16 +69,20 @@ class LLMOrchestrator {
         model,
         includeMedia,
         contextLength: prompt.length,
-        responseLength: response.length
+        responseLength: llmResult.text ? llmResult.text.length : 0,
+        latencyMs,
+        usage: llmResult.usage
       });
 
       return {
         success: true,
-        response,
+        response: llmResult.text || llmResult,
         contextSize: contextItems.length,
         provider,
         model,
-        tokensUsed: Math.ceil(prompt.length / 4) // Rough estimate
+        latencyMs,
+        usage: llmResult.usage || {},
+        tokensUsed: llmResult.usage?.total_tokens || Math.ceil(prompt.length / 4)
       };
     } catch (error) {
       console.error('Error analyzing content:', error);
@@ -315,6 +324,14 @@ Focus on information found in the provided content when possible.`;
         temperature: 0.7,
         maxTokens: 2000
       });
+
+      // Handle both old (string) and new (object) response formats
+      if (typeof response === 'string') {
+        return {
+          text: response,
+          usage: {}
+        };
+      }
 
       return response;
     } catch (error) {

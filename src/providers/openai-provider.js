@@ -19,7 +19,7 @@ class OpenAIProvider extends BaseProvider {
    * Generate a completion using OpenAI's API
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {Promise<string>} - The generated response
+   * @returns {Promise<Object>} - The generated response with metadata
    */
   async generateCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/chat/completions`;
@@ -49,7 +49,14 @@ class OpenAIProvider extends BaseProvider {
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+
+    // Return full metadata
+    return {
+      text: data.choices[0]?.message?.content || '',
+      usage: data.usage || {},
+      model: data.model,
+      finishReason: data.choices[0]?.finish_reason
+    };
   }
 
   /**

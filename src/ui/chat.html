@@ -58,15 +58,15 @@
       .message.user {
         background: #3498db;
         color: white;
-        align-self: flex-end;
-        margin-left: 20px;
+        align-self: flex-start;
+        margin-right: 20px;
       }
 
       .message.assistant {
         background: #ecf0f1;
         color: #333;
-        align-self: flex-start;
-        margin-right: 20px;
+        align-self: flex-end;
+        margin-left: 20px;
       }
 
       .message.system {
@@ -75,6 +75,46 @@
         text-align: center;
         font-size: 12px;
         align-self: center;
+      }
+
+      .message.error {
+        background: #e74c3c;
+        color: white;
+        align-self: flex-end;
+        margin-left: 20px;
+      }
+
+      .message-stats {
+        font-size: 10px;
+        color: #7f8c8d;
+        margin-top: 4px;
+        padding: 4px 8px;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+        font-family: monospace;
+      }
+
+      .message-stats .stat-item {
+        display: inline-block;
+        margin-right: 12px;
+      }
+
+      .message-stats .stat-label {
+        font-weight: 600;
+      }
+
+      .message-container {
+        display: flex;
+        flex-direction: column;
+        max-width: 100%;
+      }
+
+      .message-container.user {
+        align-items: flex-start;
+      }
+
+      .message-container.assistant {
+        align-items: flex-end;
       }
 
       .tabs-section {
@@ -849,12 +889,60 @@
 
       /**
        * Add message to chat
+       * @param {string} text - The message text
+       * @param {string} type - Message type: 'user', 'assistant', 'system', 'error'
+       * @param {Object} stats - Optional stats to display (latency, tokens, etc.)
        */
-      function addMessage(text, type = 'assistant') {
+      function addMessage(text, type = 'assistant', stats = null) {
+        // Create message container
+        const containerEl = document.createElement('div');
+        containerEl.className = `message-container ${type}`;
+
+        // Create message element
         const messageEl = document.createElement('div');
         messageEl.className = `message ${type}`;
         messageEl.textContent = text;
-        chatContainer.appendChild(messageEl);
+        containerEl.appendChild(messageEl);
+
+        // Add stats if provided (for assistant messages)
+        if (stats && type === 'assistant') {
+          const statsEl = document.createElement('div');
+          statsEl.className = 'message-stats';
+
+          const statItems = [];
+
+          // Add latency
+          if (stats.latencyMs !== undefined) {
+            statItems.push(`<span class="stat-item"><span class="stat-label">Latency:</span> ${(stats.latencyMs / 1000).toFixed(2)}s</span>`);
+          }
+
+          // Add token breakdown
+          if (stats.usage) {
+            const usage = stats.usage;
+            if (usage.input_tokens !== undefined && usage.output_tokens !== undefined) {
+              // Anthropic format
+              statItems.push(`<span class="stat-item"><span class="stat-label">Tokens:</span> ${usage.input_tokens} in / ${usage.output_tokens} out (${usage.input_tokens + usage.output_tokens} total)</span>`);
+            } else if (usage.prompt_tokens !== undefined && usage.completion_tokens !== undefined) {
+              // OpenAI format
+              statItems.push(`<span class="stat-item"><span class="stat-label">Tokens:</span> ${usage.prompt_tokens} in / ${usage.completion_tokens} out (${usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens)} total)</span>`);
+            } else if (stats.tokensUsed) {
+              // Fallback to rough estimate
+              statItems.push(`<span class="stat-item"><span class="stat-label">Tokens:</span> ~${stats.tokensUsed}</span>`);
+            }
+          } else if (stats.tokensUsed) {
+            statItems.push(`<span class="stat-item"><span class="stat-label">Tokens:</span> ~${stats.tokensUsed}</span>`);
+          }
+
+          // Add model info
+          if (stats.model) {
+            statItems.push(`<span class="stat-item"><span class="stat-label">Model:</span> ${stats.model}</span>`);
+          }
+
+          statsEl.innerHTML = statItems.join('');
+          containerEl.appendChild(statsEl);
+        }
+
+        chatContainer.appendChild(containerEl);
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
 
@@ -987,20 +1075,26 @@
           const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
 
           if (result.success) {
-            addMessage(result.response, 'assistant');
+            // Display response with stats
+            addMessage(result.response, 'assistant', {
+              latencyMs: result.latencyMs,
+              usage: result.usage,
+              tokensUsed: result.tokensUsed,
+              model: result.model
+            });
             updateStatus(
-              `Response generated using ${result.provider} (${result.tokensUsed} tokens)`,
+              `Response generated using ${result.provider}`,
               'success'
             );
           } else {
             updateStatus(`Error: ${result.error}`, 'error');
-            addMessage(`❌ Error: ${result.error}`, 'system');
+            addMessage(`❌ ${result.error}`, 'error');
           }
 
           queryInput.value = '';
         } catch (error) {
           updateStatus(`Error: ${error.message}`, 'error');
-          addMessage(`❌ Error: ${error.message}`, 'system');
+          addMessage(`❌ ${error.message}`, 'error');
         } finally {
           setLoading(false);
         }

@@ -21,7 +21,7 @@ class OllamaProvider extends BaseProvider {
    * Generate a completion using Ollama's API
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {Promise<string>} - The generated response
+   * @returns {Promise<Object>} - The generated response with metadata
    */
   async generateCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/api/chat`;
@@ -52,7 +52,18 @@ class OllamaProvider extends BaseProvider {
     }
 
     const data = await response.json();
-    return data.message?.content || '';
+
+    // Return full metadata
+    return {
+      text: data.message?.content || '',
+      usage: {
+        prompt_tokens: data.prompt_eval_count || 0,
+        completion_tokens: data.eval_count || 0,
+        total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+      },
+      model: data.model,
+      done: data.done
+    };
   }
 
   /**

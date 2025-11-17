@@ -31,6 +31,29 @@ function generateId() {
 }
 
 /**
+ * Update all view bounds based on current window size
+ */
+function updateViewBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const bounds = mainWindow.getBounds();
+  const chatWidth = 400;
+  const contentWidth = bounds.width - chatWidth;
+
+  // Update chat view bounds
+  if (chatView && !chatView.webContents.isDestroyed()) {
+    chatView.setBounds({ x: 0, y: 0, width: chatWidth, height: bounds.height });
+  }
+
+  // Update all content view bounds
+  contentViews.forEach((view, tabId) => {
+    if (view && !view.webContents.isDestroyed()) {
+      view.setBounds({ x: chatWidth, y: 0, width: contentWidth, height: bounds.height });
+    }
+  });
+}
+
+/**
  * Create and return the main application window with WebContentsView architecture
  */
 function createWindow() {
@@ -61,7 +84,6 @@ function createWindow() {
     }
   });
 
-  chatView.setBounds({ x: 0, y: 0, width: 400, height: 900 });
   mainWindow.contentView.addChildView(chatView);
 
   // Load chat UI - in production this would be a built React app
@@ -71,6 +93,14 @@ function createWindow() {
     console.error('Failed to load chat UI:', err);
     // Fallback to data URL if file not found
     chatView.webContents.loadURL('data:text/html,<h1>Chat UI Loading...</h1>');
+  });
+
+  // Set initial bounds for views
+  updateViewBounds();
+
+  // Add resize event listener to dynamically update view bounds
+  mainWindow.on('resize', () => {
+    updateViewBounds();
   });
 
   // Register the content views map with the LLM orchestrator
@@ -89,11 +119,15 @@ function createWindow() {
         }
       });
 
-      contentView.setBounds({ x: 400, y: 0, width: 1000, height: 900 });
       mainWindow.contentView.addChildView(contentView);
 
       const tabId = generateId();
       contentViews.set(tabId, contentView);
+
+      // Set bounds based on current window size
+      const bounds = mainWindow.getBounds();
+      const chatWidth = 400;
+      contentView.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
 
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
@@ -200,7 +234,11 @@ function createWindow() {
       // This is necessary because WebContentsView doesn't have a built-in z-index or bringToFront method
       mainWindow.contentView.removeChildView(view);
       mainWindow.contentView.addChildView(view);
-      view.setBounds({ x: 400, y: 0, width: 1000, height: 900 });
+
+      // Set bounds based on current window size
+      const bounds = mainWindow.getBounds();
+      const chatWidth = 400;
+      view.setBounds({ x: chatWidth, y: 0, width: bounds.width - chatWidth, height: bounds.height });
 
       // Update active tab tracking
       activeTabId = tabId;
