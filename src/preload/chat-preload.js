@@ -190,6 +190,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Update chat sidebar width (for resizable split)
+   */
+  updateChatWidth: (width) => {
+    if (typeof width !== 'number' || width < 0) {
+      throw new Error('Invalid width');
+    }
+    return ipcRenderer.invoke('update-chat-width', width);
+  },
+
+  /**
    * Version info for debugging
    */
   version: '1.0.0'
