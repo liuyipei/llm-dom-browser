@@ -20,7 +20,7 @@ class AnthropicProvider extends BaseProvider {
    * Generate a completion using Anthropic's API
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {Promise<string>} - The generated response
+   * @returns {Promise<Object>} - The generated response with metadata
    */
   async generateCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/messages`;
@@ -51,7 +51,14 @@ class AnthropicProvider extends BaseProvider {
     }
 
     const data = await response.json();
-    return data.content[0]?.text || '';
+
+    // Return full metadata
+    return {
+      text: data.content[0]?.text || '',
+      usage: data.usage || {},
+      model: data.model,
+      stopReason: data.stop_reason
+    };
   }
 
   /**
