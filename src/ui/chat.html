@@ -132,6 +132,11 @@
         border-color: #3498db;
       }
 
+      /* Don't apply light hover background when tab is selected (active) */
+      .tab-item.active .clickable-area:hover {
+        background: #2980b9; /* Darker blue for hover on selected tabs */
+      }
+
       .tab-item.current {
         border: 2px solid #e67e22;
         border-left: 4px solid #e67e22;

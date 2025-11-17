@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, ipcMain, session } = require('electron');
+const { app, BaseWindow, WebContentsView, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const PDFService = require('./services/pdf-service');
@@ -34,6 +34,10 @@ function generateId() {
  * Create and return the main application window with WebContentsView architecture
  */
 function createWindow() {
+  // Disable the default menu to prevent DevTools toggle error
+  // (BaseWindow doesn't have webContents property like BrowserWindow)
+  Menu.setApplicationMenu(null);
+
   // Main window using BaseWindow (not BrowserWindow)
   mainWindow = new BaseWindow({
     width: 1400,
