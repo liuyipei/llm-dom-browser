@@ -183,13 +183,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
-   * Get app version and info
-   */
-  getAppInfo: () => {
-    return ipcRenderer.invoke('get-app-info');
-  },
-
-  /**
    * Update chat sidebar width (for resizable split)
    */
   updateChatWidth: (width) => {

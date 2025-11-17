@@ -67,6 +67,42 @@ class OllamaProvider extends BaseProvider {
   }
 
   /**
+   * Parse Ollama's newline-delimited JSON stream
+   * @private
+   * @param {Response} response - The fetch response object
+   * @param {Function} onData - Callback called for each parsed JSON object
+   * @returns {Promise<void>}
+   */
+  async _parseOllamaStream(response, onData) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          try {
+            const data = JSON.parse(line);
+            onData(data);
+          } catch (e) {
+            console.error('Error parsing Ollama stream data:', e, line);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
    * Generate a streaming completion
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
@@ -100,36 +136,37 @@ class OllamaProvider extends BaseProvider {
       throw new Error(`Ollama API error: ${errorMessage}`);
     }
 
-    // Ollama streams newline-delimited JSON
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    // Use shared stream parser with generator pattern
+    const chunks = [];
+    let resolveNext = null;
+    let streamDone = false;
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          try {
-            const data = JSON.parse(line);
-            const content = data.message?.content;
-            if (content) {
-              yield content;
-            }
-          } catch (e) {
-            console.error('Error parsing Ollama stream data:', e, line);
-          }
+    const parsePromise = this._parseOllamaStream(response, (data) => {
+      const content = data.message?.content;
+      if (content) {
+        chunks.push(content);
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
         }
       }
-    } finally {
-      reader.releaseLock();
+    }).then(() => {
+      streamDone = true;
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    });
+
+    while (!streamDone || chunks.length > 0) {
+      if (chunks.length > 0) {
+        yield chunks.shift();
+      } else if (!streamDone) {
+        await new Promise(resolve => { resolveNext = resolve; });
+      }
     }
+
+    await parsePromise;
   }
 
   /**
@@ -187,34 +224,8 @@ class OllamaProvider extends BaseProvider {
     }
 
     if (onProgress) {
-      // Stream progress updates
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            try {
-              const data = JSON.parse(line);
-              onProgress(data);
-            } catch (e) {
-              console.error('Error parsing pull progress:', e);
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-
+      // Stream progress updates using shared parser
+      await this._parseOllamaStream(response, onProgress);
       return { success: true, model: modelName };
     } else {
       // Non-streaming pull

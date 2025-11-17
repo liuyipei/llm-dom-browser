@@ -353,33 +353,6 @@ Focus on information found in the provided content when possible.`;
   }
 
   /**
-   * Get information about the browser environment for LLM context
-   */
-  getBrowserExplanation() {
-    return {
-      type: 'Electron WebContentsView',
-      capabilities: ['navigate', 'extract_dom', 'execute_js', 'pdf_extraction'],
-      constraints: ['async_only', 'no_synchronous_dom', 'ipc_required', 'process_isolated'],
-      activeViews: this.contentViews.size,
-      viewIds: Array.from(this.contentViews.keys())
-    };
-  }
-
-  /**
-   * Get request history for debugging
-   */
-  getHistory(limit = 10) {
-    return this.requestHistory.slice(-limit);
-  }
-
-  /**
-   * Clear history
-   */
-  clearHistory() {
-    this.requestHistory = [];
-  }
-
-  /**
    * Get available providers and models
    */
   getAvailableProviders() {
