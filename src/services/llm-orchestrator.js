@@ -161,7 +161,7 @@ class LLMOrchestrator {
   }
 
   /**
-   * Capture page screenshot and resize to max 1024px on long edge
+   * Capture page screenshot and resize to max 512px on long edge
    * @param {WebContentsView} view - The view to capture
    * @returns {Object} Screenshot data with base64 and dimensions
    */
@@ -173,8 +173,8 @@ class LLMOrchestrator {
     const size = image.getSize();
     let { width, height } = size;
 
-    // Calculate new dimensions (max 1024px on long edge)
-    const maxDimension = 1024;
+    // Calculate new dimensions (max 512px on long edge)
+    const maxDimension = 512;
     let needsResize = false;
 
     if (width > maxDimension || height > maxDimension) {
