@@ -87,6 +87,7 @@ class LLMOrchestrator {
    */
   async _extractContextFromTabs(tabIds, options = {}) {
     const contextItems = [];
+    const { includeMedia = false } = options;
 
     for (const tabId of tabIds) {
       try {
@@ -117,14 +118,27 @@ class LLMOrchestrator {
               `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(options)}) : null`
             );
 
+            const contextItem = {
+              tabId,
+              type: 'html',
+              title: domData.title || title,
+              url: domData.url || url,
+              dom: domData
+            };
+
+            // Capture screenshot if media is enabled
+            if (includeMedia && domData) {
+              try {
+                const screenshot = await this._capturePageScreenshot(view);
+                contextItem.screenshot = screenshot;
+              } catch (screenshotError) {
+                console.warn(`Failed to capture screenshot for tab ${tabId}:`, screenshotError);
+                contextItem.screenshotError = screenshotError.message;
+              }
+            }
+
             if (domData) {
-              contextItems.push({
-                tabId,
-                type: 'html',
-                title: domData.title || title,
-                url: domData.url || url,
-                dom: domData
-              });
+              contextItems.push(contextItem);
             }
           } catch (jsError) {
             console.warn(`Failed to extract DOM from tab ${tabId}:`, jsError);
@@ -144,6 +158,51 @@ class LLMOrchestrator {
     }
 
     return contextItems;
+  }
+
+  /**
+   * Capture page screenshot and resize to max 1024px on long edge
+   * @param {WebContentsView} view - The view to capture
+   * @returns {Object} Screenshot data with base64 and dimensions
+   */
+  async _capturePageScreenshot(view) {
+    // Capture the visible area of the page
+    const image = await view.webContents.capturePage();
+
+    // Get original dimensions
+    const size = image.getSize();
+    let { width, height } = size;
+
+    // Calculate new dimensions (max 1024px on long edge)
+    const maxDimension = 1024;
+    let needsResize = false;
+
+    if (width > maxDimension || height > maxDimension) {
+      needsResize = true;
+      if (width > height) {
+        height = Math.round(height * (maxDimension / width));
+        width = maxDimension;
+      } else {
+        width = Math.round(width * (maxDimension / height));
+        height = maxDimension;
+      }
+    }
+
+    // Resize if needed
+    const finalImage = needsResize ? image.resize({ width, height }) : image;
+
+    // Convert to PNG and then to base64
+    const pngBuffer = finalImage.toPNG();
+    const base64Data = pngBuffer.toString('base64');
+
+    return {
+      base64: base64Data,
+      width,
+      height,
+      originalWidth: size.width,
+      originalHeight: size.height,
+      format: 'png'
+    };
   }
 
   /**
@@ -182,7 +241,7 @@ Here is the content from the browser tabs and documents the user is analyzing:
             .join('\n')}\n`;
         }
 
-        // Include media information if available
+        // Include media information (always present now)
         if (item.dom.media) {
           if (item.dom.media.images && item.dom.media.images.length > 0) {
             prompt += `\nImages (${item.dom.media.count.images}):\n`;
@@ -198,12 +257,24 @@ Here is the content from the browser tabs and documents the user is analyzing:
             });
           }
         }
+
+        // Include screenshot if available
+        if (item.screenshot) {
+          prompt += `\nScreenshot:\n`;
+          prompt += `  Dimensions: ${item.screenshot.width}x${item.screenshot.height} (original: ${item.screenshot.originalWidth}x${item.screenshot.originalHeight})\n`;
+          prompt += `  Format: PNG (base64 encoded)\n`;
+          prompt += `  Data: data:image/png;base64,${item.screenshot.base64}\n`;
+          prompt += `  Note: This is a visual snapshot of the page as rendered in the browser.\n`;
+        }
       } else if (item.content) {
         prompt += `\nContent:\n${item.content}\n`;
       }
 
       if (item.error) {
         prompt += `\nNote: ${item.error}\n`;
+      }
+      if (item.screenshotError) {
+        prompt += `\nScreenshot Error: ${item.screenshotError}\n`;
       }
     });
 

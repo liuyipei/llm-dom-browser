@@ -90,6 +90,35 @@ function getSerializedDOM(options = {}) {
       }
     });
 
+    // Extract media metadata (always - useful for context even without screenshots)
+    // Extract images (first 20 to balance usefulness vs token cost)
+    const images = Array.from(document.querySelectorAll('img'))
+      .slice(0, 20)
+      .map((img) => ({
+        src: resolveURL(img.src || img.getAttribute('src') || '', url),
+        alt: img.alt || '',
+        width: img.width || null,
+        height: img.height || null,
+        title: img.title || '',
+        loading: img.loading || null
+      }))
+      .filter((img) => img.src && img.src !== url); // Filter out empty or self-referencing URLs
+
+    // Extract videos (first 10)
+    const videos = Array.from(document.querySelectorAll('video'))
+      .slice(0, 10)
+      .map((video) => ({
+        poster: video.poster ? resolveURL(video.poster, url) : null,
+        src: video.src ? resolveURL(video.src, url) : null,
+        width: video.width || null,
+        height: video.height || null,
+        sources: Array.from(video.querySelectorAll('source')).map((source) => ({
+          src: source.src ? resolveURL(source.src, url) : null,
+          type: source.type || null
+        }))
+      }))
+      .filter((video) => video.poster || video.src || video.sources.length > 0);
+
     const result = {
       title,
       url,
@@ -99,48 +128,16 @@ function getSerializedDOM(options = {}) {
       customElements,
       mainContent,
       metaTags,
-      timestamp: new Date().toISOString()
-    };
-
-    // Extract media elements if requested (for vision-capable models)
-    if (includeMedia) {
-      // Extract images (first 20 to balance usefulness vs token cost)
-      const images = Array.from(document.querySelectorAll('img'))
-        .slice(0, 20)
-        .map((img) => ({
-          src: resolveURL(img.src || img.getAttribute('src') || '', url),
-          alt: img.alt || '',
-          width: img.width || null,
-          height: img.height || null,
-          title: img.title || '',
-          loading: img.loading || null
-        }))
-        .filter((img) => img.src && img.src !== url); // Filter out empty or self-referencing URLs
-
-      // Extract videos (first 10)
-      const videos = Array.from(document.querySelectorAll('video'))
-        .slice(0, 10)
-        .map((video) => ({
-          poster: video.poster ? resolveURL(video.poster, url) : null,
-          src: video.src ? resolveURL(video.src, url) : null,
-          width: video.width || null,
-          height: video.height || null,
-          sources: Array.from(video.querySelectorAll('source')).map((source) => ({
-            src: source.src ? resolveURL(source.src, url) : null,
-            type: source.type || null
-          }))
-        }))
-        .filter((video) => video.poster || video.src || video.sources.length > 0);
-
-      result.media = {
+      media: {
         images,
         videos,
         count: {
           images: images.length,
           videos: videos.length
         }
-      };
-    }
+      },
+      timestamp: new Date().toISOString()
+    };
 
     return result;
   } catch (error) {
