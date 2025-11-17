@@ -1,6 +1,7 @@
 /**
  * Factory for creating LLM provider instances
  * Simplifies provider instantiation and configuration
+ * Updated: November 2025 with new providers
  */
 
 const { PROVIDERS, DEFAULT_MODELS } = require('./models');
@@ -10,6 +11,10 @@ const GeminiProvider = require('./gemini-provider');
 const XAIProvider = require('./xai-provider');
 const FireworksProvider = require('./fireworks-provider');
 const OpenRouterProvider = require('./openrouter-provider');
+const DeepSeekProvider = require('./deepseek-provider');
+const KimiProvider = require('./kimi-provider');
+const MiniMaxProvider = require('./minimax-provider');
+const GLMProvider = require('./glm-provider');
 
 class ProviderFactory {
   /**
@@ -42,6 +47,18 @@ class ProviderFactory {
 
       case PROVIDERS.FIREWORKS:
         return new FireworksProvider(config);
+
+      case PROVIDERS.DEEPSEEK:
+        return new DeepSeekProvider(config);
+
+      case PROVIDERS.KIMI:
+        return new KimiProvider(config);
+
+      case PROVIDERS.MINIMAX:
+        return new MiniMaxProvider(config);
+
+      case PROVIDERS.GLM:
+        return new GLMProvider(config);
 
       default:
         throw new Error(`Unknown provider: ${providerName}. Supported providers: ${Object.values(PROVIDERS).join(', ')}`);
