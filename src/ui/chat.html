@@ -150,12 +150,25 @@
 
       input[type='text'],
       input[type='password'],
-      input[type='file'] {
+      input[type='file'],
+      select {
         flex: 1;
         padding: 8px;
         border: 1px solid #ddd;
         border-radius: 4px;
         font-size: 12px;
+      }
+
+      select {
+        cursor: pointer;
+        background: white;
+      }
+
+      .input-row label {
+        min-width: 70px;
+        font-size: 12px;
+        color: #555;
+        font-weight: 500;
       }
 
       button {
@@ -227,7 +240,26 @@
       </div>
 
       <div class="input-row">
-        <input type="password" id="apiKeyInput" placeholder="OpenAI/Claude API Key..." />
+        <input type="password" id="apiKeyInput" placeholder="API Key..." />
+      </div>
+
+      <div class="input-row">
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google Gemini</option>
+          <option value="xai">xAI (Grok)</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="fireworks">Fireworks AI</option>
+        </select>
+      </div>
+
+      <div class="input-row">
+        <label for="modelSelect">Model:</label>
+        <select id="modelSelect">
+          <option value="">Default</option>
+        </select>
       </div>
 
       <div class="input-row">
@@ -254,9 +286,51 @@
       const fileInput = document.getElementById('fileInput');
       const uploadBtn = document.getElementById('uploadBtn');
       const apiKeyInput = document.getElementById('apiKeyInput');
+      const providerSelect = document.getElementById('providerSelect');
+      const modelSelect = document.getElementById('modelSelect');
       const queryInput = document.getElementById('queryInput');
       const sendBtn = document.getElementById('sendBtn');
       const statusEl = document.getElementById('status');
+
+      // Provider models data
+      let providersData = null;
+
+      /**
+       * Load available providers and models
+       */
+      async function loadProviders() {
+        try {
+          const data = await window.electronAPI.getProviders();
+          providersData = data;
+          updateModelSelect();
+        } catch (error) {
+          console.error('Error loading providers:', error);
+        }
+      }
+
+      /**
+       * Update model dropdown based on selected provider
+       */
+      function updateModelSelect() {
+        if (!providersData) return;
+
+        const provider = providerSelect.value;
+        const models = providersData.models[provider] || {};
+
+        // Clear existing options
+        modelSelect.innerHTML = '<option value="">Default</option>';
+
+        // Add models for selected provider
+        Object.entries(models).forEach(([modelId, modelInfo]) => {
+          const option = document.createElement('option');
+          option.value = modelId;
+          option.textContent = modelInfo.name || modelId;
+          modelSelect.appendChild(option);
+        });
+      }
+
+      // Update model select when provider changes
+      providerSelect.addEventListener('change', updateModelSelect);
 
       /**
        * Add message to chat
@@ -349,6 +423,8 @@
       async function handleSendQuery() {
         const query = queryInput.value.trim();
         const apiKey = apiKeyInput.value.trim();
+        const provider = providerSelect.value;
+        const model = modelSelect.value || null;
         const tabIds = Array.from(state.selectedTabs);
 
         if (!query) {
@@ -368,15 +444,15 @@
 
         try {
           setLoading(true);
-          updateStatus('Analyzing content...');
+          updateStatus(`Analyzing content with ${provider}...`);
           addMessage(`Q: ${query}`, 'user');
 
-          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey);
+          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model);
 
           if (result.success) {
             addMessage(result.response, 'assistant');
             updateStatus(
-              `Response generated (${result.tokensUsed} tokens used)`,
+              `Response generated using ${result.provider} (${result.tokensUsed} tokens)`,
               'success'
             );
           } else {
@@ -463,6 +539,7 @@
       });
 
       // Initialize
+      loadProviders();
       updateStatus('Ready', 'success');
       addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
     </script>

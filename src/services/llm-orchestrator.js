@@ -4,12 +4,16 @@
  * Coordinates extraction from multiple WebContentsView instances
  */
 
+const ProviderFactory = require('../providers/provider-factory');
+const { PROVIDERS, MODELS } = require('../providers/models');
+
 class LLMOrchestrator {
   constructor() {
     this.contentViews = new Map();
     this.llmClient = null;
     this.requestHistory = [];
     this.maxHistory = 50;
+    this.currentProvider = null;
   }
 
   /**
@@ -22,7 +26,7 @@ class LLMOrchestrator {
   /**
    * Analyze content from one or more tabs using LLM
    */
-  async analyzeContent(query, tabIds, apiKey) {
+  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null) {
     try {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid query');
@@ -47,13 +51,15 @@ class LLMOrchestrator {
       const prompt = this._buildPrompt(query, contextItems);
 
       // Send to remote LLM API
-      const response = await this._queryRemoteLLM(prompt, apiKey);
+      const response = await this._queryRemoteLLM(prompt, apiKey, provider, model);
 
       // Store in history
       this._addToHistory({
         timestamp: new Date().toISOString(),
         query,
         tabIds,
+        provider,
+        model,
         contextLength: prompt.length,
         responseLength: response.length
       });
@@ -62,6 +68,8 @@ class LLMOrchestrator {
         success: true,
         response,
         contextSize: contextItems.length,
+        provider,
+        model,
         tokensUsed: Math.ceil(prompt.length / 4) // Rough estimate
       };
     } catch (error) {
@@ -190,54 +198,25 @@ Focus on information found in the provided content when possible.`;
   }
 
   /**
-   * Send query to remote LLM API
-   * Currently a placeholder - implement with actual API calls
+   * Send query to remote LLM API using the selected provider
    */
-  async _queryRemoteLLM(prompt, apiKey) {
+  async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null) {
     try {
-      // Placeholder implementation
-      // In production, this would call actual LLM APIs (OpenAI, Anthropic, etc.)
-
-      // Example: Using a remote API endpoint
-      const apiEndpoint = process.env.LLM_API_ENDPOINT || 'https://api.example.com/query';
-
-      // This is a mock response - replace with actual API call
-      const mockResponse = `Based on the provided content, here's my analysis:
-
-I've analyzed the content from your tabs. The information shows several key points:
-
-1. The primary content discusses the topic at hand
-2. Supporting information is available in multiple sections
-3. Related resources are referenced throughout
-
-To provide a more detailed response, I would need to process the actual content and connect it to your specific question.
-
-[This is a mock response. Connect to a real LLM API by setting LLM_API_ENDPOINT environment variable]`;
-
-      return mockResponse;
-
-      // ACTUAL API CALL TEMPLATE (uncomment when ready):
-      /*
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          prompt,
-          maxTokens: 2000,
-          temperature: 0.7
-        })
+      // Create provider instance
+      const providerInstance = ProviderFactory.createProvider(provider, {
+        apiKey,
+        model
       });
 
-      if (!response.ok) {
-        throw new Error(`LLM API error: ${response.statusText}`);
-      }
+      this.currentProvider = providerInstance;
 
-      const data = await response.json();
-      return data.response || data.text || data.choices?.[0]?.text || '';
-      */
+      // Generate completion using the provider
+      const response = await providerInstance.generateCompletion(prompt, {
+        temperature: 0.7,
+        maxTokens: 2000
+      });
+
+      return response;
     } catch (error) {
       console.error('Error querying LLM API:', error);
       throw error;
@@ -281,6 +260,23 @@ To provide a more detailed response, I would need to process the actual content 
    */
   clearHistory() {
     this.requestHistory = [];
+  }
+
+  /**
+   * Get available providers and models
+   */
+  getAvailableProviders() {
+    return {
+      providers: PROVIDERS,
+      models: MODELS
+    };
+  }
+
+  /**
+   * Get supported providers list
+   */
+  getSupportedProviders() {
+    return ProviderFactory.getSupportedProviders();
   }
 }
 

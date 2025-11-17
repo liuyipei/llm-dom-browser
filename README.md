@@ -11,6 +11,7 @@ This MVP implements the architecture specified in `LLM-DOM-BROWSER-20251116.md`,
 - **PDF text extraction**: Native PDF viewing + server-side text extraction for LLM analysis
 - **File uploads**: Support for PDFs, text files, and documents
 - **LLM integration**: Orchestrator service for coordinating LLM API calls with multi-source context
+- **Multi-LLM Provider Support**: Choose from OpenAI, Anthropic, Google Gemini, xAI, OpenRouter, and Fireworks AI (see [MULTI-LLM-PROVIDERS.md](MULTI-LLM-PROVIDERS.md))
 
 ## Architecture
 
@@ -39,6 +40,16 @@ src/
 ├── services/
 │   ├── pdf-service.js      # PDF text extraction (pdf-parse)
 │   └── llm-orchestrator.js # LLM API coordination
+├── providers/              # Multi-LLM provider system
+│   ├── base-provider.js    # Base provider class
+│   ├── openai-provider.js  # OpenAI integration
+│   ├── anthropic-provider.js # Anthropic/Claude integration
+│   ├── gemini-provider.js  # Google Gemini integration
+│   ├── xai-provider.js     # xAI/Grok integration
+│   ├── openrouter-provider.js # OpenRouter integration
+│   ├── fireworks-provider.js # Fireworks AI integration
+│   ├── provider-factory.js # Provider factory
+│   └── models.js           # Model definitions
 └── ui/
     └── chat.html           # Chat interface (standalone HTML)
 
@@ -46,6 +57,7 @@ Root:
 ├── package.json            # Dependencies, scripts
 ├── TECH-STACK.md           # Version decisions and best practices
 ├── LLM-DOM-BROWSER-20251116.md  # Design specification
+├── MULTI-LLM-PROVIDERS.md  # Multi-provider documentation
 └── README.md               # This file
 ```
 
