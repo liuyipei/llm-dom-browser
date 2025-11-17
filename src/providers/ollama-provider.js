@@ -4,14 +4,18 @@
  * API Documentation: https://github.com/ollama/ollama/blob/main/docs/api.md
  */
 
-const BaseProvider = require('./base-provider');
+const LocalProvider = require('./local-provider');
 const { PROVIDER_ENDPOINTS } = require('./models');
 
-class OllamaProvider extends BaseProvider {
+class OllamaProvider extends LocalProvider {
   constructor(config = {}) {
     super({
       ...config,
-      baseUrl: config.baseUrl || PROVIDER_ENDPOINTS.ollama || 'http://localhost:11434'
+      baseUrl: config.baseUrl || PROVIDER_ENDPOINTS.ollama || 'http://localhost:11434',
+      // Ollama uses different endpoints
+      healthCheckEndpoint: '/api/tags',
+      listModelsEndpoint: '/api/tags',
+      requiresApiKey: false
     });
     // API key is optional for local Ollama
     this.validateConfig(['model']);
@@ -67,39 +71,12 @@ class OllamaProvider extends BaseProvider {
   }
 
   /**
-   * Parse Ollama's newline-delimited JSON stream
-   * @private
-   * @param {Response} response - The fetch response object
-   * @param {Function} onData - Callback called for each parsed JSON object
-   * @returns {Promise<void>}
+   * Override to parse Ollama's model list format
+   * @param {Object} data - Raw response data
+   * @returns {Array} - Parsed model array
    */
-  async _parseOllamaStream(response, onData) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          try {
-            const data = JSON.parse(line);
-            onData(data);
-          } catch (e) {
-            console.error('Error parsing Ollama stream data:', e, line);
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+  parseModelsResponse(data) {
+    return data.models || [];
   }
 
   /**
@@ -141,7 +118,7 @@ class OllamaProvider extends BaseProvider {
     let resolveNext = null;
     let streamDone = false;
 
-    const parsePromise = this._parseOllamaStream(response, (data) => {
+    const parsePromise = this.parseStream(response, (data) => {
       const content = data.message?.content;
       if (content) {
         chunks.push(content);
@@ -150,7 +127,7 @@ class OllamaProvider extends BaseProvider {
           resolveNext = null;
         }
       }
-    }).then(() => {
+    }, 'ndjson').then(() => {
       streamDone = true;
       if (resolveNext) {
         resolveNext();
@@ -167,33 +144,6 @@ class OllamaProvider extends BaseProvider {
     }
 
     await parsePromise;
-  }
-
-  /**
-   * List available models from local Ollama instance
-   * @returns {Promise<Array>} - Array of model objects
-   */
-  async listModels() {
-    const url = `${this.baseUrl}/api/tags`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to list Ollama models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.models || [];
-    } catch (error) {
-      console.error('Error listing Ollama models:', error);
-      throw error;
-    }
   }
 
   /**
@@ -225,7 +175,7 @@ class OllamaProvider extends BaseProvider {
 
     if (onProgress) {
       // Stream progress updates using shared parser
-      await this._parseOllamaStream(response, onProgress);
+      await this.parseStream(response, onProgress, 'ndjson');
       return { success: true, model: modelName };
     } else {
       // Non-streaming pull
@@ -256,25 +206,6 @@ class OllamaProvider extends BaseProvider {
     }
 
     return { success: true };
-  }
-
-  /**
-   * Check if Ollama service is running and accessible
-   * @returns {Promise<boolean>} - True if service is running
-   */
-  async healthCheck() {
-    try {
-      const url = `${this.baseUrl}/api/tags`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      return response.ok;
-    } catch (error) {
-      return false;
-    }
   }
 }
 

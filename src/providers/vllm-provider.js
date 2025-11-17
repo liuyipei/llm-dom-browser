@@ -1,69 +1,22 @@
 /**
  * vLLM provider implementation
- * vLLM is OpenAI API-compatible, so we extend OpenAIProvider
+ * vLLM is OpenAI API-compatible, so we extend LocalOpenAICompatibleProvider
  * Supports locally hosted vLLM models via http://localhost:8000
  * Documentation: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
  */
 
-const OpenAIProvider = require('./openai-provider');
+const LocalOpenAICompatibleProvider = require('./local-openai-compatible-provider');
 const { PROVIDER_ENDPOINTS } = require('./models');
 
-class VLLMProvider extends OpenAIProvider {
+class VLLMProvider extends LocalOpenAICompatibleProvider {
   constructor(config = {}) {
     super({
       ...config,
       baseUrl: config.baseUrl || PROVIDER_ENDPOINTS.vllm || 'http://localhost:8000/v1',
       // API key is optional for local vLLM
-      apiKey: config.apiKey || 'dummy-key-for-local'
+      apiKey: config.apiKey || 'dummy-key-for-local',
+      requiresApiKey: false
     });
-  }
-
-  /**
-   * List available models from vLLM instance
-   * @returns {Promise<Array>} - Array of model objects
-   */
-  async listModels() {
-    const url = `${this.baseUrl}/models`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to list vLLM models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data || [];
-    } catch (error) {
-      console.error('Error listing vLLM models:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if vLLM service is running and accessible
-   * @returns {Promise<boolean>} - True if service is running
-   */
-  async healthCheck() {
-    try {
-      const url = `${this.baseUrl}/models`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        }
-      });
-      return response.ok;
-    } catch (error) {
-      return false;
-    }
   }
 
   /**
