@@ -1236,30 +1236,28 @@
       }
 
       /**
-       * Add conversation summary to chat container
+       * Add conversation summary to chat container (minimal metadata only)
        * @param {string} tabId - The conversation tab ID
-       * @param {string} userMessage - The user's message
+       * @param {number} conversationId - The conversation number
        * @param {number} userTokens - User message token count
        * @param {number} assistantTokens - Assistant response token count
        * @param {Object} stats - Stats from the LLM response
        */
-      function addConversationToChat(tabId, userMessage, userTokens, assistantTokens, stats) {
+      function addConversationToChat(tabId, conversationId, userTokens, assistantTokens, stats) {
         const containerEl = document.createElement('div');
         containerEl.className = 'message-container conversation';
         containerEl.style.cursor = 'pointer';
-        containerEl.title = 'Click to view conversation in browser';
+        containerEl.title = 'Click to view full conversation in browser';
 
         const messageEl = document.createElement('div');
         messageEl.className = 'message conversation';
 
-        // Show metadata: timestamp, truncated user message, and stats
+        // Show minimal metadata only
         const metadataDiv = document.createElement('div');
         metadataDiv.style.cssText = 'font-family: monospace; font-size: 11px;';
 
         const timestamp = new Date().toLocaleTimeString();
-        const truncated = truncateText(userMessage, 80);
-
-        metadataDiv.textContent = `💬 Conversation [${timestamp}]: ${truncated}`;
+        metadataDiv.textContent = `💬 Conversation #${conversationId} [${timestamp}]`;
         messageEl.appendChild(metadataDiv);
 
         // Add stats
@@ -1270,13 +1268,13 @@
         const statItems = [];
 
         if (stats.latencyMs !== undefined) {
-          statItems.push(`${(stats.latencyMs / 1000).toFixed(2)}s`);
+          statItems.push(`⏱ ${(stats.latencyMs / 1000).toFixed(2)}s`);
         }
 
-        statItems.push(`${userTokens}↑ / ${assistantTokens}↓ tokens`);
+        statItems.push(`📊 ${userTokens}↑ / ${assistantTokens}↓`);
 
         if (stats.model) {
-          statItems.push(stats.model);
+          statItems.push(`🤖 ${stats.model}`);
         }
 
         statsEl.textContent = statItems.join(' • ');
@@ -1431,11 +1429,11 @@
 
             const tabId = createConversationTab(query, result.response, stats);
 
-            // Add conversation summary to chat container
+            // Add conversation summary to chat container (metadata only)
             const tab = state.activeTabs.get(tabId);
             addConversationToChat(
               tabId,
-              query,
+              tab.id,
               tab.userTokens,
               tab.assistantTokens,
               stats
