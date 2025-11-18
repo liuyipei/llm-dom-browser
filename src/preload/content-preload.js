@@ -263,30 +263,26 @@ function setupLinkClickHandler() {
         return;
       }
 
-      // Check for modifier keys
-      const ctrlOrCmd = event.ctrlKey || event.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
-      const shift = event.shiftKey;
+      // Note: Ctrl+Click and Cmd+Click are now handled by setWindowOpenHandler in tab-manager.js
+      // This is more reliable as it intercepts Electron's native window opening before DOM events
+      // We only handle middle-click here as a fallback
+
       const middleClick = event.button === 1;
 
-      // Chrome-like behavior:
-      // 1. Ctrl+Click or Cmd+Click: Open in new background tab
-      // 2. Ctrl+Shift+Click or Cmd+Shift+Click: Open in new foreground tab
-      // 3. Middle-click: Open in new background tab
-      if (ctrlOrCmd || middleClick) {
+      // Middle-click: Open in new background tab
+      if (middleClick) {
         event.preventDefault();
         event.stopPropagation();
-
-        const openInForeground = ctrlOrCmd && shift;
 
         // Send IPC to main process to open in new tab
         ipcRenderer.send('open-link-in-new-tab', {
           url: href,
-          foreground: openInForeground
+          foreground: false
         });
 
-        console.log(`[LLM Browser] Opening link in new ${openInForeground ? 'foreground' : 'background'} tab:`, href);
+        console.log(`[LLM Browser] Middle-click: Opening link in new background tab:`, href);
       }
-      // Normal click without modifiers: let it navigate normally
+      // Normal click and Ctrl+Click: let Electron handle it via setWindowOpenHandler
     }, true); // Use capture phase
 
     // Also handle middle-click (auxclick event)
