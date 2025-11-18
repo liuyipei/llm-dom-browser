@@ -82,6 +82,16 @@ class MenuBuilder {
           },
           { type: 'separator' },
           {
+            label: 'Bookmark This Page',
+            accelerator: shortcuts.bookmark,
+            click: () => {
+              if (this.chatView && this.chatView.webContents) {
+                this.chatView.webContents.send('toggle-bookmark');
+              }
+            }
+          },
+          { type: 'separator' },
+          {
             label: 'Next Tab',
             accelerator: shortcuts.nextTab,
             click: () => {

@@ -16,6 +16,7 @@ function getShortcuts(isMac = false) {
     reopenTab: 'CmdOrCtrl+Shift+T',
     closeWindow: 'CmdOrCtrl+Shift+W',
     quit: isMac ? null : 'Ctrl+Q',
+    bookmark: 'CmdOrCtrl+D',
 
     // Tab navigation
     nextTab: isMac ? 'Cmd+Option+Right' : 'Ctrl+Tab',
