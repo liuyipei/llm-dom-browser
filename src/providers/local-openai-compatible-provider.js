@@ -3,9 +3,9 @@
  * Extends OpenAI provider functionality with local provider utilities
  */
 
-const OpenAIProvider = require('./openai-provider');
+const OpenAICompatibleProvider = require('./openai-compatible-provider');
 
-class LocalOpenAICompatibleProvider extends OpenAIProvider {
+class LocalOpenAICompatibleProvider extends OpenAICompatibleProvider {
   constructor(config = {}) {
     super(config);
     // API key is optional for local providers
