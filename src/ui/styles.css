@@ -175,6 +175,35 @@ body {
   text-transform: uppercase;
 }
 
+.tabs-sort-buttons {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.sort-btn {
+  background: #ecf0f1;
+  color: #555;
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 10px;
+  transition: all 0.2s ease;
+}
+
+.sort-btn:hover {
+  background: #bdc3c7;
+  color: #333;
+}
+
+.sort-btn.active {
+  background: #3498db;
+  color: white;
+}
+
+.sort-btn.active:hover {
+  background: #2980b9;
+}
+
 .tabs-section .help-text {
   font-size: 10px;
   color: #999;

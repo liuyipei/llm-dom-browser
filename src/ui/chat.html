@@ -34,12 +34,20 @@
 
     <div class="tabs-section">
       <h3>📑 Open Tabs</h3>
+      <div class="tabs-sort-buttons">
+        <button id="sortByUrlBtn" class="sort-btn button-small" title="Sort tabs by URL">Sort by URL</button>
+        <button id="sortByTimeBtn" class="sort-btn button-small" title="Sort tabs by most recent view">Sort by Time</button>
+        <button id="sortManualBtn" class="sort-btn button-small active" title="Manual order (drag to reorder)">Manual Order</button>
+      </div>
       <div class="help-text">Click tab to view, checkbox to select for LLM</div>
       <div class="tab-list" id="tabList"></div>
     </div>
 
     <div class="bookmarks-section">
-      <h3>⭐ Bookmarks</h3>
+      <h3>
+        <span>⭐ Bookmarks</span>
+        <button id="bookmarkBtn" class="bookmark-btn button-small" title="Bookmark current tab">★</button>
+      </h3>
       <div class="bookmark-search">
         <input type="text" id="bookmarkSearchInput" placeholder="Search bookmarks..." />
       </div>
@@ -49,18 +57,17 @@
     <div class="input-section">
       <div class="input-row">
         <input type="text" id="urlInput" placeholder="Enter URL or file path..." />
-        <button id="openBtn" class="button-small">Open</button>
-        <button id="bookmarkBtn" class="bookmark-btn button-small" title="Bookmark current tab">★</button>
+        <button id="openBtn" class="button-small">🔗 Open</button>
       </div>
 
       <div class="input-row">
         <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
-        <button id="uploadBtn" class="button-small">Upload</button>
+        <button id="uploadBtn" class="button-small">📤 Upload</button>
       </div>
 
       <div class="input-row">
         <input type="text" id="queryInput" placeholder="Ask a question..." />
-        <button id="sendBtn" class="button-small">Send</button>
+        <button id="sendBtn" class="button-small">➤ Send</button>
       </div>
 
       <div class="input-row">
@@ -130,7 +137,9 @@
         currentProvider: null, // Track current provider for saving API key when switching
         tabOrder: [], // Array of tab IDs in display order
         closedTabs: [], // Array of recently closed tabs (max 20)
-        draggedTabId: null // Currently dragged tab
+        draggedTabId: null, // Currently dragged tab
+        sortMode: 'manual', // Tab sort mode: 'manual', 'url', or 'time'
+        tabLastViewTime: new Map() // Track last view time for each tab
       };
 
       // DOM Elements
@@ -164,6 +173,9 @@
       const bookmarkList = document.getElementById('bookmarkList');
       const bookmarkBtn = document.getElementById('bookmarkBtn');
       const bookmarkSearchInput = document.getElementById('bookmarkSearchInput');
+      const sortByUrlBtn = document.getElementById('sortByUrlBtn');
+      const sortByTimeBtn = document.getElementById('sortByTimeBtn');
+      const sortManualBtn = document.getElementById('sortManualBtn');
 
       // Provider models data
       let providersData = null;
@@ -1164,6 +1176,8 @@
       async function switchTab(tabId) {
         try {
           await window.electronAPI.switchTab(tabId);
+          // Track last view time for sorting
+          state.tabLastViewTime.set(tabId, Date.now());
           // The active tab will be updated via the onActiveTabChanged listener
           updateBookmarkButton();
         } catch (error) {
@@ -1372,11 +1386,63 @@
         const initialTitle = result.title || 'Loading...';
         state.activeTabs.set(result.id, { url: result.url, title: initialTitle });
 
+        // Initialize last view time for new tab
+        state.tabLastViewTime.set(result.id, Date.now());
+
         if (result.isActive) {
           state.activeTabId = result.id;
         }
 
         return result;
+      }
+
+      /**
+       * Set tab sort mode
+       */
+      function setSortMode(mode) {
+        state.sortMode = mode;
+
+        // Update button states
+        sortByUrlBtn.classList.remove('active');
+        sortByTimeBtn.classList.remove('active');
+        sortManualBtn.classList.remove('active');
+
+        if (mode === 'url') {
+          sortByUrlBtn.classList.add('active');
+        } else if (mode === 'time') {
+          sortByTimeBtn.classList.add('active');
+        } else {
+          sortManualBtn.classList.add('active');
+        }
+
+        renderTabs();
+      }
+
+      /**
+       * Sort tabs based on current sort mode
+       */
+      function getSortedTabOrder() {
+        let sorted = [...state.tabOrder];
+
+        if (state.sortMode === 'url') {
+          // Sort alphabetically by URL
+          sorted.sort((a, b) => {
+            const tabA = state.activeTabs.get(a);
+            const tabB = state.activeTabs.get(b);
+            if (!tabA || !tabB) return 0;
+            return (tabA.url || '').localeCompare(tabB.url || '');
+          });
+        } else if (state.sortMode === 'time') {
+          // Sort by most recently viewed (most recent first)
+          sorted.sort((a, b) => {
+            const timeA = state.tabLastViewTime.get(a) || 0;
+            const timeB = state.tabLastViewTime.get(b) || 0;
+            return timeB - timeA; // Descending order
+          });
+        }
+        // For 'manual' mode, use the existing order
+
+        return sorted;
       }
 
       /**
@@ -1395,12 +1461,19 @@
           state.activeTabs.forEach((tab, tabId) => {
             if (!state.tabOrder.includes(tabId)) {
               state.tabOrder.push(tabId);
+              // Initialize last view time for new tabs
+              if (!state.tabLastViewTime.has(tabId)) {
+                state.tabLastViewTime.set(tabId, Date.now());
+              }
             }
           });
         }
 
-        // Render all tabs in order
-        state.tabOrder.forEach(tabId => {
+        // Get sorted order based on current sort mode
+        const displayOrder = getSortedTabOrder();
+
+        // Render all tabs in display order
+        displayOrder.forEach(tabId => {
           if (state.activeTabs.has(tabId)) {
             renderTabElement(tabId);
           }
@@ -1466,7 +1539,7 @@
 
         // Create close button
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close';
+        closeBtn.textContent = '×';
         closeBtn.className = 'button-small';
         closeBtn.draggable = false; // Prevent drag interference
         closeBtn.addEventListener('click', (e) => {
@@ -1706,6 +1779,9 @@
       ollamaPullBtn.addEventListener('click', pullOllamaModel);
       bookmarkBtn.addEventListener('click', toggleBookmark);
       bookmarkSearchInput.addEventListener('input', handleBookmarkSearch);
+      sortByUrlBtn.addEventListener('click', () => setSortMode('url'));
+      sortByTimeBtn.addEventListener('click', () => setSortMode('time'));
+      sortManualBtn.addEventListener('click', () => setSortMode('manual'));
 
       // Save endpoint on change
       endpointInput.addEventListener('change', () => {
