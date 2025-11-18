@@ -6,6 +6,8 @@
 
 const ProviderFactory = require('../providers/provider-factory');
 const { PROVIDERS, MODELS, OPTIONAL_API_KEY_PROVIDERS } = require('../providers/models');
+const ScreenshotService = require('./screenshot-service');
+const { createErrorResult } = require('../utils');
 
 class LLMOrchestrator {
   constructor() {
@@ -86,10 +88,7 @@ class LLMOrchestrator {
       };
     } catch (error) {
       console.error('Error analyzing content:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      return createErrorResult(error);
     }
   }
 
@@ -144,7 +143,7 @@ class LLMOrchestrator {
             // Capture screenshot if media is enabled
             if (includeMedia && domData) {
               try {
-                const screenshot = await this._capturePageScreenshot(view);
+                const screenshot = await ScreenshotService.captureAndResize(view);
                 contextItem.screenshot = screenshot;
               } catch (screenshotError) {
                 console.warn(`Failed to capture screenshot for tab ${tabId}:`, screenshotError);
@@ -173,51 +172,6 @@ class LLMOrchestrator {
     }
 
     return contextItems;
-  }
-
-  /**
-   * Capture page screenshot and resize to max 512px on long edge
-   * @param {WebContentsView} view - The view to capture
-   * @returns {Object} Screenshot data with base64 and dimensions
-   */
-  async _capturePageScreenshot(view) {
-    // Capture the visible area of the page
-    const image = await view.webContents.capturePage();
-
-    // Get original dimensions
-    const size = image.getSize();
-    let { width, height } = size;
-
-    // Calculate new dimensions (max 512px on long edge)
-    const maxDimension = 512;
-    let needsResize = false;
-
-    if (width > maxDimension || height > maxDimension) {
-      needsResize = true;
-      if (width > height) {
-        height = Math.round(height * (maxDimension / width));
-        width = maxDimension;
-      } else {
-        width = Math.round(width * (maxDimension / height));
-        height = maxDimension;
-      }
-    }
-
-    // Resize if needed
-    const finalImage = needsResize ? image.resize({ width, height }) : image;
-
-    // Convert to PNG and then to base64
-    const pngBuffer = finalImage.toPNG();
-    const base64Data = pngBuffer.toString('base64');
-
-    return {
-      base64: base64Data,
-      width,
-      height,
-      originalWidth: size.width,
-      originalHeight: size.height,
-      format: 'png'
-    };
   }
 
   /**
@@ -321,43 +275,38 @@ class LLMOrchestrator {
    * Send query to LLM API (local or remote) using the selected provider
    */
   async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
-    try {
-      // Create provider instance with optional custom endpoint
-      const config = {
-        apiKey,
-        model
-      };
+    // Create provider instance with optional custom endpoint
+    const config = {
+      apiKey,
+      model
+    };
 
-      // Add custom endpoint if provided
-      if (customEndpoint) {
-        config.baseUrl = customEndpoint;
-      }
-
-      const providerInstance = ProviderFactory.createProvider(provider, config);
-
-      this.currentProvider = providerInstance;
-
-      // Generate completion using the provider
-      // Note: For vision models, image URLs are included in the prompt text
-      // Future enhancement: Use multimodal message format for proper vision API support
-      const response = await providerInstance.generateCompletion(prompt, {
-        temperature: 0.7,
-        maxTokens: 2000
-      });
-
-      // Handle both old (string) and new (object) response formats
-      if (typeof response === 'string') {
-        return {
-          text: response,
-          usage: {}
-        };
-      }
-
-      return response;
-    } catch (error) {
-      console.error('Error querying LLM API:', error);
-      throw error;
+    // Add custom endpoint if provided
+    if (customEndpoint) {
+      config.baseUrl = customEndpoint;
     }
+
+    const providerInstance = ProviderFactory.createProvider(provider, config);
+
+    this.currentProvider = providerInstance;
+
+    // Generate completion using the provider
+    // Note: For vision models, image URLs are included in the prompt text
+    // Future enhancement: Use multimodal message format for proper vision API support
+    const response = await providerInstance.generateCompletion(prompt, {
+      temperature: 0.7,
+      maxTokens: 2000
+    });
+
+    // Handle both old (string) and new (object) response formats
+    if (typeof response === 'string') {
+      return {
+        text: response,
+        usage: {}
+      };
+    }
+
+    return response;
   }
 
   /**

@@ -52,8 +52,39 @@ function extractFilePathFromURL(url) {
   return url;
 }
 
+/**
+ * Handle async errors with consistent error response format
+ * @param {Function} fn - Async function to wrap
+ * @returns {Function} - Wrapped function that catches errors
+ */
+function handleAsyncError(fn) {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      console.error('Async error:', error);
+      return createErrorResult(error);
+    }
+  };
+}
+
+/**
+ * Create standardized error result object
+ * @param {Error|string} error - Error object or message
+ * @returns {Object} - Standardized error result
+ */
+function createErrorResult(error) {
+  const message = error?.message || String(error);
+  return {
+    success: false,
+    error: message
+  };
+}
+
 module.exports = {
   generateId,
   isValidFilePath,
-  extractFilePathFromURL
+  extractFilePathFromURL,
+  handleAsyncError,
+  createErrorResult
 };

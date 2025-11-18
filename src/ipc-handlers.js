@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { generateId, isValidFilePath, extractFilePathFromURL } = require('./utils');
+const { generateId, isValidFilePath, extractFilePathFromURL, handleAsyncError, createErrorResult } = require('./utils');
 
 /**
  * IPC Handlers - Registers all IPC handlers for main process communication
@@ -79,60 +79,55 @@ class IPCHandlers {
    */
   registerContentHandlers() {
     // Handle IPC: Extract content from view for LLM analysis
-    ipcMain.handle('extract-content', async (event, tabId, options = {}) => {
-      try {
-        const view = this.contentViews.get(tabId);
-        if (!view) {
-          throw new Error(`View ${tabId} not found`);
-        }
+    ipcMain.handle('extract-content', handleAsyncError(async (event, tabId, options = {}) => {
+      const view = this.contentViews.get(tabId);
+      if (!view) {
+        throw new Error(`View ${tabId} not found`);
+      }
 
-        const url = view.webContents.getURL();
-        const title = view.webContents.getTitle();
+      const url = view.webContents.getURL();
+      const title = view.webContents.getTitle();
 
-        // Check if this is a PDF
-        if (url.endsWith('.pdf') || url.includes('.pdf?')) {
-          // PDF: Extract text using pdf-parse in main process
-          const pdfPath = extractFilePathFromURL(url);
-          const pdfText = await this.pdfService.extractText(pdfPath);
+      // Check if this is a PDF
+      if (url.endsWith('.pdf') || url.includes('.pdf?')) {
+        // PDF: Extract text using pdf-parse in main process
+        const pdfPath = extractFilePathFromURL(url);
+        const pdfText = await this.pdfService.extractText(pdfPath);
+        return {
+          type: 'pdf',
+          title,
+          url,
+          text: pdfText.slice(0, 5000), // Limit to 5000 chars for token efficiency
+          totalLength: pdfText.length
+        };
+      } else {
+        // HTML: Serialize DOM via preload script
+        try {
+          // Validate options to prevent injection
+          const safeOptions = {
+            includeMedia: Boolean(options?.includeMedia)
+          };
+          const domData = await view.webContents.executeJavaScript(
+            `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(safeOptions)}) : null`
+          );
           return {
-            type: 'pdf',
+            type: 'html',
             title,
             url,
-            text: pdfText.slice(0, 5000), // Limit to 5000 chars for token efficiency
-            totalLength: pdfText.length
+            dom: domData
           };
-        } else {
-          // HTML: Serialize DOM via preload script
-          try {
-            // Validate options to prevent injection
-            const safeOptions = {
-              includeMedia: Boolean(options?.includeMedia)
-            };
-            const domData = await view.webContents.executeJavaScript(
-              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(safeOptions)}) : null`
-            );
-            return {
-              type: 'html',
-              title,
-              url,
-              dom: domData
-            };
-          } catch (jsError) {
-            console.error('Failed to execute DOM serialization:', jsError);
-            return {
-              type: 'html',
-              title,
-              url,
-              dom: null,
-              error: 'DOM serialization failed'
-            };
-          }
+        } catch (jsError) {
+          console.error('Failed to execute DOM serialization:', jsError);
+          return {
+            type: 'html',
+            title,
+            url,
+            dom: null,
+            error: 'DOM serialization failed'
+          };
         }
-      } catch (error) {
-        console.error('Error extracting content:', error);
-        throw error;
       }
-    });
+    }));
   }
 
   /**
@@ -140,14 +135,9 @@ class IPCHandlers {
    */
   registerLLMHandlers() {
     // Handle IPC: Send query to LLM with context
-    ipcMain.handle('query-llm', async (event, { query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
-      try {
-        return await this.llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
-      } catch (error) {
-        console.error('Error querying LLM:', error);
-        throw error;
-      }
-    });
+    ipcMain.handle('query-llm', handleAsyncError(async (event, { query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
+      return await this.llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
+    }));
   }
 
   /**
@@ -155,96 +145,66 @@ class IPCHandlers {
    */
   registerProviderHandlers() {
     // Handle IPC: Get available providers and models
-    ipcMain.handle('get-providers', async () => {
-      try {
-        return this.llmOrchestrator.getAvailableProviders();
-      } catch (error) {
-        console.error('Error getting providers:', error);
-        return { error: error.message };
-      }
-    });
+    ipcMain.handle('get-providers', handleAsyncError(async () => {
+      return this.llmOrchestrator.getAvailableProviders();
+    }));
 
     // Handle IPC: Fetch models dynamically for a provider
-    ipcMain.handle('fetch-provider-models', async (event, { provider, apiKey }) => {
-      try {
-        const ModelDiscovery = require('./providers/model-discovery');
-        const models = await ModelDiscovery.getRecommendedModels(provider, apiKey);
-        return { success: true, models };
-      } catch (error) {
-        console.error('Error fetching provider models:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle('fetch-provider-models', handleAsyncError(async (event, { provider, apiKey }) => {
+      const ModelDiscovery = require('./providers/model-discovery');
+      const models = await ModelDiscovery.getRecommendedModels(provider, apiKey);
+      return { success: true, models };
+    }));
 
     // Handle IPC: Check health of local provider
-    ipcMain.handle('check-provider-health', async (event, { provider, endpoint }) => {
-      try {
-        const ModelDiscovery = require('./providers/model-discovery');
-        const health = await ModelDiscovery.checkProviderHealth(provider, endpoint);
-        return { success: true, health };
-      } catch (error) {
-        console.error('Error checking provider health:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle('check-provider-health', handleAsyncError(async (event, { provider, endpoint }) => {
+      const ModelDiscovery = require('./providers/model-discovery');
+      const health = await ModelDiscovery.checkProviderHealth(provider, endpoint);
+      return { success: true, health };
+    }));
 
     // Handle IPC: Fetch models from local provider
-    ipcMain.handle('fetch-local-models', async (event, { provider, endpoint, apiKey }) => {
-      try {
-        const ModelDiscovery = require('./providers/model-discovery');
-        const result = await ModelDiscovery.fetchLocalProviderModels(provider, endpoint, apiKey);
-        return { success: true, ...result };
-      } catch (error) {
-        console.error('Error fetching local models:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle('fetch-local-models', handleAsyncError(async (event, { provider, endpoint, apiKey }) => {
+      const ModelDiscovery = require('./providers/model-discovery');
+      const result = await ModelDiscovery.fetchLocalProviderModels(provider, endpoint, apiKey);
+      return { success: true, ...result };
+    }));
 
     // Handle IPC: Pull Ollama model
-    ipcMain.handle('ollama-pull-model', async (event, { modelName, endpoint }) => {
-      try {
-        const OllamaProvider = require('./providers/ollama-provider');
-        const ollama = new OllamaProvider({
-          baseUrl: endpoint || 'http://localhost:11434',
-          model: modelName
-        });
+    ipcMain.handle('ollama-pull-model', handleAsyncError(async (event, { modelName, endpoint }) => {
+      const OllamaProvider = require('./providers/ollama-provider');
+      const ollama = new OllamaProvider({
+        baseUrl: endpoint || 'http://localhost:11434',
+        model: modelName
+      });
 
-        const chatView = this.windowManager.getChatView();
+      const chatView = this.windowManager.getChatView();
 
-        // Pull with progress updates
-        const result = await ollama.pullModel(modelName, (progress) => {
-          // Send progress updates to renderer
-          if (chatView && chatView.webContents) {
-            chatView.webContents.send('ollama-pull-progress', {
-              modelName,
-              progress
-            });
-          }
-        });
+      // Pull with progress updates
+      const result = await ollama.pullModel(modelName, (progress) => {
+        // Send progress updates to renderer
+        if (chatView && chatView.webContents) {
+          chatView.webContents.send('ollama-pull-progress', {
+            modelName,
+            progress
+          });
+        }
+      });
 
-        return { success: true, result };
-      } catch (error) {
-        console.error('Error pulling Ollama model:', error);
-        return { success: false, error: error.message };
-      }
-    });
+      return { success: true, result };
+    }));
 
     // Handle IPC: List Ollama models
-    ipcMain.handle('ollama-list-models', async (event, { endpoint }) => {
-      try {
-        const OllamaProvider = require('./providers/ollama-provider');
-        const ollama = new OllamaProvider({
-          baseUrl: endpoint || 'http://localhost:11434',
-          model: 'dummy' // Required for validation but not used for listing
-        });
+    ipcMain.handle('ollama-list-models', handleAsyncError(async (event, { endpoint }) => {
+      const OllamaProvider = require('./providers/ollama-provider');
+      const ollama = new OllamaProvider({
+        baseUrl: endpoint || 'http://localhost:11434',
+        model: 'dummy' // Required for validation but not used for listing
+      });
 
-        const models = await ollama.listModels();
-        return { success: true, models };
-      } catch (error) {
-        console.error('Error listing Ollama models:', error);
-        return { success: false, error: error.message };
-      }
-    });
+      const models = await ollama.listModels();
+      return { success: true, models };
+    }));
   }
 
   /**
@@ -252,50 +212,45 @@ class IPCHandlers {
    */
   registerFileHandlers() {
     // Handle IPC: Upload and process file
-    ipcMain.handle('upload-file', async (event, { filePath, fileName }) => {
-      try {
-        // Validate file path for security
-        if (!isValidFilePath(filePath)) {
-          throw new Error('Invalid file path');
-        }
-
-        if (!fs.existsSync(filePath)) {
-          throw new Error('File not found');
-        }
-
-        // Get file extension
-        const ext = path.extname(filePath).toLowerCase();
-
-        if (ext === '.pdf') {
-          // Process PDF
-          const pdfText = await this.pdfService.extractText(filePath);
-          const tabId = generateId();
-          return {
-            tabId,
-            fileName,
-            type: 'pdf',
-            textPreview: pdfText.slice(0, 500),
-            fullPath: filePath
-          };
-        } else if (['.txt', '.md', '.doc', '.docx'].includes(ext)) {
-          // Process text files
-          let content = fs.readFileSync(filePath, 'utf-8');
-          const tabId = generateId();
-          return {
-            tabId,
-            fileName,
-            type: 'text',
-            content: content.slice(0, 5000),
-            fullPath: filePath
-          };
-        } else {
-          throw new Error(`Unsupported file type: ${ext}`);
-        }
-      } catch (error) {
-        console.error('Error uploading file:', error);
-        throw error;
+    ipcMain.handle('upload-file', handleAsyncError(async (event, { filePath, fileName }) => {
+      // Validate file path for security
+      if (!isValidFilePath(filePath)) {
+        throw new Error('Invalid file path');
       }
-    });
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error('File not found');
+      }
+
+      // Get file extension
+      const ext = path.extname(filePath).toLowerCase();
+
+      if (ext === '.pdf') {
+        // Process PDF
+        const pdfText = await this.pdfService.extractText(filePath);
+        const tabId = generateId();
+        return {
+          tabId,
+          fileName,
+          type: 'pdf',
+          textPreview: pdfText.slice(0, 500),
+          fullPath: filePath
+        };
+      } else if (['.txt', '.md', '.doc', '.docx'].includes(ext)) {
+        // Process text files
+        let content = fs.readFileSync(filePath, 'utf-8');
+        const tabId = generateId();
+        return {
+          tabId,
+          fileName,
+          type: 'text',
+          content: content.slice(0, 5000),
+          fullPath: filePath
+        };
+      } else {
+        throw new Error(`Unsupported file type: ${ext}`);
+      }
+    }));
   }
 
   /**
