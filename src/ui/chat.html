@@ -53,9 +53,9 @@
       <div class="tabs-section">
         <h3>📑 Open Tabs</h3>
         <div class="tabs-sort-buttons">
-          <button id="sortByUrlBtn" class="sort-btn button-small" title="Sort tabs by URL">Sort by URL</button>
-          <button id="sortByTimeBtn" class="sort-btn button-small" title="Sort tabs by most recent view">Sort by Time</button>
-          <button id="sortManualBtn" class="sort-btn button-small active" title="Manual order (drag to reorder)">Manual Order</button>
+          <button id="sortByUrlBtn" class="sort-btn button-small" title="Sort tabs by URL (click to toggle direction)">Sort by URL</button>
+          <button id="sortByTimeBtn" class="sort-btn button-small active" title="Sort tabs by most recent view (click to toggle direction)">Sort by Time ↓</button>
+          <button id="sortManualBtn" class="sort-btn button-small" title="Manual order (drag to reorder)">Manual Order</button>
         </div>
         <div class="help-text">Click tab to view, checkbox to select for LLM</div>
         <div class="tab-list" id="tabList"></div>
@@ -140,7 +140,8 @@
         tabOrder: [], // Array of tab IDs in display order
         closedTabs: [], // Array of recently closed tabs (max 20)
         draggedTabId: null, // Currently dragged tab
-        sortMode: 'manual', // Tab sort mode: 'manual', 'url', or 'time'
+        sortMode: 'time', // Tab sort mode: 'manual', 'url', or 'time' (default: time)
+        sortDirection: 'desc', // Sort direction: 'asc' or 'desc' (default: desc - most recent/Z-A first)
         tabLastViewTime: new Map(), // Track last view time for each tab
         conversationCounter: 0, // Strictly increasing counter for conversation IDs
         pendingConversation: null // Temporarily stores user message until assistant responds
@@ -1671,7 +1672,18 @@
        * Set tab sort mode
        */
       function setSortMode(mode) {
-        state.sortMode = mode;
+        // If clicking the same mode, toggle direction
+        if (state.sortMode === mode && mode !== 'manual') {
+          state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          // Switching to a new mode, set default direction
+          state.sortMode = mode;
+          if (mode === 'time') {
+            state.sortDirection = 'desc'; // Most recent first
+          } else if (mode === 'url') {
+            state.sortDirection = 'asc'; // A-Z
+          }
+        }
 
         // Update button states
         sortByUrlBtn.classList.remove('active');
@@ -1686,7 +1698,26 @@
           sortManualBtn.classList.add('active');
         }
 
+        updateSortButtonLabels();
         renderTabs();
+      }
+
+      /**
+       * Update sort button labels to show current direction
+       */
+      function updateSortButtonLabels() {
+        if (state.sortMode === 'url') {
+          const arrow = state.sortDirection === 'asc' ? '↑' : '↓';
+          sortByUrlBtn.textContent = `Sort by URL ${arrow}`;
+          sortByTimeBtn.textContent = 'Sort by Time';
+        } else if (state.sortMode === 'time') {
+          const arrow = state.sortDirection === 'desc' ? '↓' : '↑';
+          sortByTimeBtn.textContent = `Sort by Time ${arrow}`;
+          sortByUrlBtn.textContent = 'Sort by URL';
+        } else {
+          sortByUrlBtn.textContent = 'Sort by URL';
+          sortByTimeBtn.textContent = 'Sort by Time';
+        }
       }
 
       /**
@@ -1696,19 +1727,21 @@
         let sorted = [...state.tabOrder];
 
         if (state.sortMode === 'url') {
-          // Sort alphabetically by URL
+          // Sort alphabetically by URL (supports both directions)
           sorted.sort((a, b) => {
             const tabA = state.activeTabs.get(a);
             const tabB = state.activeTabs.get(b);
             if (!tabA || !tabB) return 0;
-            return (tabA.url || '').localeCompare(tabB.url || '');
+            const comparison = (tabA.url || '').localeCompare(tabB.url || '');
+            return state.sortDirection === 'asc' ? comparison : -comparison;
           });
         } else if (state.sortMode === 'time') {
-          // Sort by most recently viewed (most recent first)
+          // Sort by time (most recent first = desc, oldest first = asc)
           sorted.sort((a, b) => {
             const timeA = state.tabLastViewTime.get(a) || 0;
             const timeB = state.tabLastViewTime.get(b) || 0;
-            return timeB - timeA; // Descending order
+            const comparison = timeB - timeA; // Base comparison (newest first)
+            return state.sortDirection === 'desc' ? comparison : -comparison;
           });
         }
         // For 'manual' mode, use the existing order
@@ -2062,6 +2095,9 @@
       sortByUrlBtn.addEventListener('click', () => setSortMode('url'));
       sortByTimeBtn.addEventListener('click', () => setSortMode('time'));
       sortManualBtn.addEventListener('click', () => setSortMode('manual'));
+
+      // Initialize sort button labels with initial state
+      updateSortButtonLabels();
 
       // Save endpoint on change
       endpointInput.addEventListener('change', () => {
