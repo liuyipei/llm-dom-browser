@@ -4,7 +4,7 @@
  * Safely exposes DOM serialization API to web content via contextBridge
  */
 
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 /**
  * Helper function to resolve relative URLs to absolute URLs
@@ -229,6 +229,116 @@ if (document.readyState === 'loading') {
 } else {
   // DOM already loaded
   injectScrollbarStyles();
+}
+
+/**
+ * Setup link click interception for Chrome-like behavior
+ * - Ctrl+Click (Cmd+Click on Mac): Open in new background tab
+ * - Ctrl+Shift+Click (Cmd+Shift+Click on Mac): Open in new foreground tab
+ * - Middle-click (button 1): Open in new background tab
+ */
+function setupLinkClickHandler() {
+  try {
+    // Capture phase to intercept before site handlers
+    document.addEventListener('click', (event) => {
+      // Find the closest anchor tag
+      let target = event.target;
+      while (target && target.tagName !== 'A') {
+        target = target.parentElement;
+      }
+
+      // Not a link, let it through
+      if (!target || target.tagName !== 'A') {
+        return;
+      }
+
+      const href = target.href;
+
+      // Ignore empty hrefs, javascript:, mailto:, tel:, etc.
+      if (!href ||
+          href.startsWith('javascript:') ||
+          href.startsWith('mailto:') ||
+          href.startsWith('tel:') ||
+          href.startsWith('#')) {
+        return;
+      }
+
+      // Check for modifier keys
+      const ctrlOrCmd = event.ctrlKey || event.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
+      const shift = event.shiftKey;
+      const middleClick = event.button === 1;
+
+      // Chrome-like behavior:
+      // 1. Ctrl+Click or Cmd+Click: Open in new background tab
+      // 2. Ctrl+Shift+Click or Cmd+Shift+Click: Open in new foreground tab
+      // 3. Middle-click: Open in new background tab
+      if (ctrlOrCmd || middleClick) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const openInForeground = ctrlOrCmd && shift;
+
+        // Send IPC to main process to open in new tab
+        ipcRenderer.send('open-link-in-new-tab', {
+          url: href,
+          foreground: openInForeground
+        });
+
+        console.log(`[LLM Browser] Opening link in new ${openInForeground ? 'foreground' : 'background'} tab:`, href);
+      }
+      // Normal click without modifiers: let it navigate normally
+    }, true); // Use capture phase
+
+    // Also handle middle-click (auxclick event)
+    document.addEventListener('auxclick', (event) => {
+      // Middle-click is button 1
+      if (event.button !== 1) {
+        return;
+      }
+
+      // Find the closest anchor tag
+      let target = event.target;
+      while (target && target.tagName !== 'A') {
+        target = target.parentElement;
+      }
+
+      if (!target || target.tagName !== 'A') {
+        return;
+      }
+
+      const href = target.href;
+
+      if (!href ||
+          href.startsWith('javascript:') ||
+          href.startsWith('mailto:') ||
+          href.startsWith('tel:') ||
+          href.startsWith('#')) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Middle-click opens in background tab (Chrome behavior)
+      ipcRenderer.send('open-link-in-new-tab', {
+        url: href,
+        foreground: false
+      });
+
+      console.log('[LLM Browser] Middle-click: Opening link in new background tab:', href);
+    }, true);
+
+    console.log('[LLM Browser] Link click handler initialized');
+  } catch (error) {
+    console.error('[LLM Browser] Error setting up link click handler:', error);
+  }
+}
+
+// Setup link click handler when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupLinkClickHandler);
+} else {
+  setupLinkClickHandler();
 }
 
 console.log('Content preload script loaded');

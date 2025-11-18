@@ -42,9 +42,14 @@ class TabManager {
 
   /**
    * Open a new tab with the given URL
+   * @param {string} url - The URL to open
+   * @param {Object} options - Options for opening the tab
+   * @param {boolean} options.activate - Whether to switch to the new tab (default: true)
    */
-  async openTab(url) {
+  async openTab(url, options = {}) {
     try {
+      const { activate = true } = options;
+
       const contentView = new WebContentsView({
         webPreferences: {
           nodeIntegration: false,
@@ -111,8 +116,11 @@ class TabManager {
         // Tab is still created and user can retry
       });
 
-      // Set as active tab if it's the first tab
-      if (!this.activeTabId) {
+      // Determine if we should activate this tab
+      const shouldActivate = !this.activeTabId || activate;
+
+      // Set as active tab if it's the first tab or activation is requested
+      if (shouldActivate) {
         this.activeTabId = tabId;
         if (this.chatView && this.chatView.webContents) {
           this.chatView.webContents.send('active-tab-changed', { tabId });
@@ -122,7 +130,7 @@ class TabManager {
       // Get the current title (might be empty if page hasn't loaded yet)
       const currentTitle = contentView.webContents.getTitle();
 
-      console.log(`Opened tab ${tabId} with URL: ${url}, initial title: ${currentTitle}`);
+      console.log(`Opened tab ${tabId} with URL: ${url}, initial title: ${currentTitle}, activated: ${shouldActivate}`);
       return { id: tabId, url, title: currentTitle || 'Loading...', isActive: tabId === this.activeTabId };
     } catch (error) {
       console.error('Error opening tab:', error);

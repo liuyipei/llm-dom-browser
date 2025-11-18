@@ -47,6 +47,17 @@ class IPCHandlers {
       return await this.tabManager.openTab(url);
     });
 
+    // Handle IPC: Open link in new tab (with foreground/background option)
+    // This is sent from content-preload.js when user Ctrl+clicks or middle-clicks a link
+    ipcMain.on('open-link-in-new-tab', async (event, { url, foreground }) => {
+      try {
+        console.log(`Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
+        await this.tabManager.openTab(url, { activate: foreground });
+      } catch (error) {
+        console.error('Error opening link in new tab:', error);
+      }
+    });
+
     // Handle IPC: Close tab
     ipcMain.handle('close-tab', (event, tabId) => {
       return this.tabManager.closeTab(tabId);
