@@ -893,7 +893,7 @@
        * @returns {string} - Complete HTML document
        */
       function generateConversationHTML(conversation) {
-        const { id, userMessage, assistantMessage, stats } = conversation;
+        const { id, userMessage, assistantMessage, stats, sourceTabs, includeMedia } = conversation;
 
         const timestamp = new Date().toLocaleString();
         const model = stats?.model || 'Unknown';
@@ -930,6 +930,12 @@
         html += '    .message-content a { color: #0969da; text-decoration: none; }\n';
         html += '    .message-content a:hover { text-decoration: underline; }\n';
         html += '    .token-badge { display: inline-block; background: #f6f8fa; padding: 2px 8px; border-radius: 12px; font-size: 11px; color: #57606a; border: 1px solid #d0d7de; }\n';
+        html += '    .source-tabs { margin-top: 20px; padding: 15px; background: #f6f8fa; border-radius: 6px; border: 1px solid #d0d7de; }\n';
+        html += '    .source-tabs h3 { margin: 0 0 10px 0; font-size: 14px; color: #24292f; font-weight: 600; }\n';
+        html += '    .source-tab-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: #57606a; }\n';
+        html += '    .source-tab-item .tab-icon { font-size: 12px; }\n';
+        html += '    .source-tab-item .tab-title { color: #24292f; font-weight: 500; }\n';
+        html += '    .media-badge { display: inline-flex; align-items: center; gap: 4px; background: #ddf4ff; color: #0969da; padding: 4px 8px; border-radius: 12px; font-size: 11px; border: 1px solid #54aeff; margin-left: 10px; }\n';
         html += '  </style>\n';
         html += '</head>\n';
         html += '<body>\n';
@@ -941,6 +947,27 @@
         html += '      <span>⏱ Latency: ' + latency + '</span>\n';
         html += '      <span>📊 Tokens: ' + conversation.userTokens + '↑ / ' + conversation.assistantTokens + '↓</span>\n';
         html += '    </div>\n';
+
+        // Add source tabs information if available
+        if (sourceTabs && sourceTabs.length > 0) {
+          html += '    <div class="source-tabs">\n';
+          html += '      <h3>📑 Source Tabs Used (' + sourceTabs.length + ')';
+          if (includeMedia) {
+            html += '<span class="media-badge">📷 Images Included</span>';
+          }
+          html += '</h3>\n';
+          sourceTabs.forEach((tab, index) => {
+            html += '      <div class="source-tab-item">\n';
+            html += '        <span class="tab-icon">🔗</span>\n';
+            html += '        <span class="tab-title">' + (tab.title || 'Untitled') + '</span>\n';
+            if (tab.url) {
+              html += '        <span style="color: #57606a; font-size: 11px;">(' + tab.url.substring(0, 60) + (tab.url.length > 60 ? '...' : '') + ')</span>\n';
+            }
+            html += '      </div>\n';
+          });
+          html += '    </div>\n';
+        }
+
         html += '  </div>\n';
         html += '  <div class="message-block user-message">\n';
         html += '    <div class="message-label user-label">\n';
@@ -1014,9 +1041,11 @@
        * @param {string} userMessage - The user's message
        * @param {string} assistantMessage - The assistant's response
        * @param {Object} stats - Stats from the LLM response
+       * @param {Array} sourceTabs - Array of source tab objects with id, title, and url
+       * @param {boolean} includeMedia - Whether images were included in the query
        * @returns {string} - The created tab ID
        */
-      function createConversationTab(userMessage, assistantMessage, stats = null) {
+      function createConversationTab(userMessage, assistantMessage, stats = null, sourceTabs = [], includeMedia = false) {
         // Increment conversation counter
         state.conversationCounter++;
 
@@ -1048,6 +1077,8 @@
           assistantMessage,
           assistantTokens,
           stats,
+          sourceTabs,
+          includeMedia,
           timestamp: Date.now()
         };
 
@@ -1064,6 +1095,8 @@
           userTokens,
           assistantTokens,
           stats,
+          sourceTabs,
+          includeMedia,
           timestamp: Date.now()
         };
 
@@ -1293,7 +1326,17 @@
               model: result.model
             };
 
-            const tabId = createConversationTab(query, result.response, stats);
+            // Collect source tab information
+            const sourceTabs = tabIds.map(id => {
+              const tab = state.activeTabs.get(id);
+              return {
+                id: id,
+                title: tab ? tab.title : 'Unknown Tab',
+                url: tab ? tab.url : ''
+              };
+            });
+
+            const tabId = createConversationTab(query, result.response, stats, sourceTabs, includeMedia);
 
             // Add conversation summary to chat container (metadata only)
             const tab = state.activeTabs.get(tabId);
