@@ -1,10 +1,14 @@
 /**
  * UI Configuration (Browser-compatible)
- * Mirrors the provider configuration from ../providers/models.js
- * This allows the UI to access provider data without Node.js modules
+ * IMPORTANT: This file must stay in sync with ../providers/models.js
+ *
+ * WARNING: Single Source of Truth Violation
+ * TODO: Refactor to fetch this configuration via IPC from main process
+ * to eliminate duplication. For now, manually ensure changes to models.js
+ * are reflected here.
  */
 
-// Provider constants
+// Provider constants - MUST match PROVIDERS in models.js
 const PROVIDERS = {
   OPENAI: 'openai',
   ANTHROPIC: 'anthropic',
@@ -22,6 +26,7 @@ const PROVIDERS = {
 };
 
 // Local providers that don't require API keys
+// MUST match OPTIONAL_API_KEY_PROVIDERS in models.js
 const LOCAL_PROVIDERS = [
   PROVIDERS.OLLAMA,
   PROVIDERS.VLLM,
@@ -29,6 +34,7 @@ const LOCAL_PROVIDERS = [
 ];
 
 // Default endpoints for local providers
+// MUST match PROVIDER_ENDPOINTS in models.js for these providers
 const DEFAULT_ENDPOINTS = {
   [PROVIDERS.OLLAMA]: 'http://localhost:11434',
   [PROVIDERS.VLLM]: 'http://localhost:8000/v1',

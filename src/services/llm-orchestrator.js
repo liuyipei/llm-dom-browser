@@ -125,8 +125,12 @@ class LLMOrchestrator {
         } else {
           // Extract HTML DOM
           try {
+            // Validate options to prevent injection
+            const safeOptions = {
+              includeMedia: Boolean(options?.includeMedia)
+            };
             const domData = await view.webContents.executeJavaScript(
-              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(options)}) : null`
+              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(safeOptions)}) : null`
             );
 
             const contextItem = {
@@ -220,81 +224,97 @@ class LLMOrchestrator {
    * Build LLM prompt from query and context
    */
   _buildPrompt(query, contextItems) {
-    let prompt = `You are an AI assistant analyzing web content and documents.
-The user has asked the following question:
-
-QUESTION:
-${query}
-
-CONTEXT:
-Here is the content from the browser tabs and documents the user is analyzing:
-
-`;
+    const parts = [
+      'You are an AI assistant analyzing web content and documents.',
+      'The user has asked the following question:',
+      '',
+      'QUESTION:',
+      query,
+      '',
+      'CONTEXT:',
+      'Here is the content from the browser tabs and documents the user is analyzing:',
+      ''
+    ];
 
     contextItems.forEach((item, index) => {
-      prompt += `\n--- TAB ${index + 1}: ${item.title || 'Untitled'} ---\n`;
-      prompt += `URL: ${item.url}\n`;
-      prompt += `Type: ${item.type}\n`;
+      parts.push(`\n--- TAB ${index + 1}: ${item.title || 'Untitled'} ---`);
+      parts.push(`URL: ${item.url}`);
+      parts.push(`Type: ${item.type}`);
 
       if (item.dom) {
-        // Format HTML DOM data
-        prompt += `\nTitle: ${item.dom.title || 'N/A'}\n`;
-        if (item.dom.mainContent) {
-          prompt += `\nMain Content:\n${item.dom.mainContent}\n`;
-        }
-        if (item.dom.headings && item.dom.headings.length > 0) {
-          prompt += `\nHeadings:\n${item.dom.headings.map((h) => `${h.level}: ${h.text}`).join('\n')}\n`;
-        }
-        if (item.dom.paragraphs && item.dom.paragraphs.length > 0) {
-          prompt += `\nParagraphs:\n${item.dom.paragraphs
-            .map((p) => p.text)
-            .slice(0, 5)
-            .join('\n')}\n`;
-        }
-
-        // Include media information (always present now)
-        if (item.dom.media) {
-          if (item.dom.media.images && item.dom.media.images.length > 0) {
-            prompt += `\nImages (${item.dom.media.count.images}):\n`;
-            item.dom.media.images.forEach((img, idx) => {
-              prompt += `  ${idx + 1}. ${img.alt || 'No alt text'} - ${img.src}\n`;
-              if (img.title) prompt += `     Title: ${img.title}\n`;
-            });
-          }
-          if (item.dom.media.videos && item.dom.media.videos.length > 0) {
-            prompt += `\nVideos (${item.dom.media.count.videos}):\n`;
-            item.dom.media.videos.forEach((video, idx) => {
-              prompt += `  ${idx + 1}. ${video.src || video.poster || 'Video element'}\n`;
-            });
-          }
-        }
-
-        // Include screenshot if available
-        if (item.screenshot) {
-          prompt += `\nScreenshot:\n`;
-          prompt += `  Dimensions: ${item.screenshot.width}x${item.screenshot.height} (original: ${item.screenshot.originalWidth}x${item.screenshot.originalHeight})\n`;
-          prompt += `  Format: PNG (base64 encoded)\n`;
-          prompt += `  Data: data:image/png;base64,${item.screenshot.base64}\n`;
-          prompt += `  Note: This is a visual snapshot of the page as rendered in the browser.\n`;
-        }
+        this._addDOMContent(parts, item.dom);
+        this._addMediaContent(parts, item.dom.media);
+        this._addScreenshotContent(parts, item.screenshot);
       } else if (item.content) {
-        prompt += `\nContent:\n${item.content}\n`;
+        parts.push(`\nContent:\n${item.content}`);
       }
 
-      if (item.error) {
-        prompt += `\nNote: ${item.error}\n`;
-      }
-      if (item.screenshotError) {
-        prompt += `\nScreenshot Error: ${item.screenshotError}\n`;
-      }
+      if (item.error) parts.push(`\nNote: ${item.error}`);
+      if (item.screenshotError) parts.push(`\nScreenshot Error: ${item.screenshotError}`);
     });
 
-    prompt += `\n--- END OF CONTEXT ---\n
+    parts.push('\n--- END OF CONTEXT ---\n');
+    parts.push('');
+    parts.push('Based on the above context, please provide a comprehensive answer to the user\'s question.');
+    parts.push('Focus on information found in the provided content when possible.');
 
-Based on the above context, please provide a comprehensive answer to the user's question.
-Focus on information found in the provided content when possible.`;
+    return parts.join('\n');
+  }
 
-    return prompt;
+  /**
+   * Add DOM content to prompt parts
+   */
+  _addDOMContent(parts, dom) {
+    parts.push(`\nTitle: ${dom.title || 'N/A'}`);
+
+    if (dom.mainContent) {
+      parts.push(`\nMain Content:\n${dom.mainContent}`);
+    }
+
+    if (dom.headings?.length > 0) {
+      const headings = dom.headings.map(h => `${h.level}: ${h.text}`).join('\n');
+      parts.push(`\nHeadings:\n${headings}`);
+    }
+
+    if (dom.paragraphs?.length > 0) {
+      const paragraphs = dom.paragraphs.slice(0, 5).map(p => p.text).join('\n');
+      parts.push(`\nParagraphs:\n${paragraphs}`);
+    }
+  }
+
+  /**
+   * Add media content to prompt parts
+   */
+  _addMediaContent(parts, media) {
+    if (!media) return;
+
+    if (media.images?.length > 0) {
+      parts.push(`\nImages (${media.count.images}):`);
+      media.images.forEach((img, idx) => {
+        parts.push(`  ${idx + 1}. ${img.alt || 'No alt text'} - ${img.src}`);
+        if (img.title) parts.push(`     Title: ${img.title}`);
+      });
+    }
+
+    if (media.videos?.length > 0) {
+      parts.push(`\nVideos (${media.count.videos}):`);
+      media.videos.forEach((video, idx) => {
+        parts.push(`  ${idx + 1}. ${video.src || video.poster || 'Video element'}`);
+      });
+    }
+  }
+
+  /**
+   * Add screenshot content to prompt parts
+   */
+  _addScreenshotContent(parts, screenshot) {
+    if (!screenshot) return;
+
+    parts.push('\nScreenshot:');
+    parts.push(`  Dimensions: ${screenshot.width}x${screenshot.height} (original: ${screenshot.originalWidth}x${screenshot.originalHeight})`);
+    parts.push('  Format: PNG (base64 encoded)');
+    parts.push(`  Data: data:image/png;base64,${screenshot.base64}`);
+    parts.push('  Note: This is a visual snapshot of the page as rendered in the browser.');
   }
 
   /**

@@ -2,6 +2,8 @@
  * Utility functions for the application
  */
 
+const path = require('path');
+
 /**
  * Generate a unique ID for tabs/views
  */
@@ -11,10 +13,33 @@ function generateId() {
 
 /**
  * Validate file path to prevent directory traversal attacks
+ * Uses path normalization to detect all traversal attempts
  */
 function isValidFilePath(filePath) {
-  // Basic validation - in production, use more robust checks
-  return typeof filePath === 'string' && filePath.length > 0 && !filePath.includes('..');
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    return false;
+  }
+
+  // Require absolute paths
+  if (!path.isAbsolute(filePath)) {
+    return false;
+  }
+
+  // Normalize and resolve to detect traversal
+  const normalized = path.normalize(filePath);
+  const resolved = path.resolve(filePath);
+
+  // If normalization changes the path significantly, it may be malicious
+  if (normalized !== resolved) {
+    return false;
+  }
+
+  // Check for directory traversal patterns
+  if (filePath.includes('..') || normalized.includes('..')) {
+    return false;
+  }
+
+  return true;
 }
 
 /**

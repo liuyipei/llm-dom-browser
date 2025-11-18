@@ -387,20 +387,28 @@ class TabManager {
   cleanup() {
     this.contentViews.forEach((view, tabId) => {
       try {
-        // Check if mainWindow and its contentView still exist before cleanup
-        if (this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.contentView) {
-          this.mainWindow.contentView.removeChildView(view);
-        }
-        // Check if view's webContents is not already destroyed
-        if (view && view.webContents && !view.webContents.isDestroyed()) {
-          view.webContents.destroy();
-        }
+        this._cleanupView(view, tabId);
       } catch (err) {
         console.error(`Error cleaning up view ${tabId}:`, err);
       }
     });
     this.contentViews.clear();
     this.activeTabId = null;
+  }
+
+  /**
+   * Clean up a single view
+   */
+  _cleanupView(view, tabId) {
+    const hasMainWindow = this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.contentView;
+    if (hasMainWindow) {
+      this.mainWindow.contentView.removeChildView(view);
+    }
+
+    const hasWebContents = view && view.webContents && !view.webContents.isDestroyed();
+    if (hasWebContents) {
+      view.webContents.destroy();
+    }
   }
 }
 
