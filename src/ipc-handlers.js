@@ -60,6 +60,28 @@ class IPCHandlers {
           return;
         }
 
+        // Prevent navigation on the sender (the tab that sent the ctrl-click event)
+        // This is necessary because DOM preventDefault() doesn't always work in Electron
+        const senderWebContents = event.sender;
+        const senderCurrentURL = senderWebContents.getURL();
+
+        // Set up a one-time will-navigate listener to block navigation to the ctrl-clicked URL
+        const preventNavigation = (navEvent, navURL) => {
+          if (navURL === url) {
+            console.log(`[IPC Handler] Blocking navigation to ${navURL} in current tab`);
+            navEvent.preventDefault();
+            // Remove the listener after preventing once
+            senderWebContents.removeListener('will-navigate', preventNavigation);
+          }
+        };
+
+        senderWebContents.once('will-navigate', preventNavigation);
+
+        // Set a timeout to remove the listener if navigation doesn't happen within 500ms
+        setTimeout(() => {
+          senderWebContents.removeListener('will-navigate', preventNavigation);
+        }, 500);
+
         console.log(`[IPC Handler] Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
         const result = await this.tabManager.openTab(url, { activate: foreground });
         console.log(`[IPC Handler] Successfully opened tab:`, result);
