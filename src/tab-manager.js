@@ -12,6 +12,7 @@ class TabManager {
     this.contentViews = options.contentViews || new Map();
     this.activeTabId = null;
     this.updateViewBounds = options.updateViewBounds;
+    this.ipcHandlers = options.ipcHandlers;
     this.closedTabs = []; // Track recently closed tabs for reopen functionality
     this.maxClosedTabs = 10; // Limit history size
   }
@@ -24,6 +25,7 @@ class TabManager {
     if (options.chatView) this.chatView = options.chatView;
     if (options.contentViews) this.contentViews = options.contentViews;
     if (options.updateViewBounds) this.updateViewBounds = options.updateViewBounds;
+    if (options.ipcHandlers) this.ipcHandlers = options.ipcHandlers;
   }
 
   /**
@@ -59,6 +61,11 @@ class TabManager {
           sandbox: true
         }
       });
+
+      // Set up navigation blocking for ctrl-click behavior BEFORE any navigation
+      if (this.ipcHandlers) {
+        this.ipcHandlers.setupNavigationBlocking(contentView.webContents);
+      }
 
       this.mainWindow.contentView.addChildView(contentView);
 

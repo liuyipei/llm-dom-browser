@@ -47,7 +47,8 @@ function createWindow() {
   tabManager.updateReferences({
     mainWindow,
     chatView,
-    updateViewBounds: () => windowManager.updateViewBounds()
+    updateViewBounds: () => windowManager.updateViewBounds(),
+    ipcHandlers
   });
 
   menuBuilder.updateReferences({

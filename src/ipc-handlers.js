@@ -13,6 +13,10 @@ class IPCHandlers {
     this.llmOrchestrator = options.llmOrchestrator;
     this.pdfService = options.pdfService;
     this.contentViews = options.contentViews;
+
+    // Track URLs that should not navigate (from ctrl-clicks)
+    // Map of webContents.id -> Set of URLs to block
+    this.blockedNavigations = new Map();
   }
 
   /**
@@ -24,6 +28,27 @@ class IPCHandlers {
     if (options.llmOrchestrator) this.llmOrchestrator = options.llmOrchestrator;
     if (options.pdfService) this.pdfService = options.pdfService;
     if (options.contentViews) this.contentViews = options.contentViews;
+  }
+
+  /**
+   * Set up navigation blocking for a webContents
+   * This should be called when a new tab is created
+   */
+  setupNavigationBlocking(webContents) {
+    webContents.on('will-navigate', (event, navigationUrl) => {
+      const webContentsId = webContents.id;
+      const blockedSet = this.blockedNavigations.get(webContentsId);
+
+      if (blockedSet && blockedSet.has(navigationUrl)) {
+        console.log(`[Navigation Blocker] Blocking navigation to ${navigationUrl} in webContents ${webContentsId}`);
+        event.preventDefault();
+        // Remove from blocked list after preventing
+        blockedSet.delete(navigationUrl);
+        if (blockedSet.size === 0) {
+          this.blockedNavigations.delete(webContentsId);
+        }
+      }
+    });
   }
 
   /**
@@ -60,27 +85,27 @@ class IPCHandlers {
           return;
         }
 
-        // Prevent navigation on the sender (the tab that sent the ctrl-click event)
-        // This is necessary because DOM preventDefault() doesn't always work in Electron
+        // Add URL to blocked list for this webContents IMMEDIATELY
         const senderWebContents = event.sender;
-        const senderCurrentURL = senderWebContents.getURL();
+        const senderId = senderWebContents.id;
 
-        // Set up a one-time will-navigate listener to block navigation to the ctrl-clicked URL
-        const preventNavigation = (navEvent, navURL) => {
-          if (navURL === url) {
-            console.log(`[IPC Handler] Blocking navigation to ${navURL} in current tab`);
-            navEvent.preventDefault();
-            // Remove the listener after preventing once
-            senderWebContents.removeListener('will-navigate', preventNavigation);
-          }
-        };
+        if (!this.blockedNavigations.has(senderId)) {
+          this.blockedNavigations.set(senderId, new Set());
+        }
+        this.blockedNavigations.get(senderId).add(url);
+        console.log(`[IPC Handler] Added ${url} to blocked navigation list for webContents ${senderId}`);
 
-        senderWebContents.once('will-navigate', preventNavigation);
-
-        // Set a timeout to remove the listener if navigation doesn't happen within 500ms
+        // Remove from blocked list after 1 second
         setTimeout(() => {
-          senderWebContents.removeListener('will-navigate', preventNavigation);
-        }, 500);
+          const blockedSet = this.blockedNavigations.get(senderId);
+          if (blockedSet) {
+            blockedSet.delete(url);
+            console.log(`[IPC Handler] Removed ${url} from blocked navigation list`);
+            if (blockedSet.size === 0) {
+              this.blockedNavigations.delete(senderId);
+            }
+          }
+        }, 1000);
 
         console.log(`[IPC Handler] Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
         const result = await this.tabManager.openTab(url, { activate: foreground });
