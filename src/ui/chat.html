@@ -1300,9 +1300,18 @@
           // In a real app, you'd use a file dialog here
           // For now, we'll mock it
           const result = await window.electronAPI.uploadFile(file.name, file.name);
-          state.activeTabs.set(result.tabId, { url: file.name, title: result.fileName });
 
-          addMessage(`📄 Uploaded: ${file.name}`, 'system');
+          // Add the new tab to active tabs
+          state.activeTabs.set(result.tabId, {
+            url: result.url || file.name,
+            title: result.fileName,
+            type: result.type
+          });
+
+          // Auto-select the tab so it's included in next LLM query
+          state.selectedTabs.add(result.tabId);
+
+          addMessage(`📄 Uploaded: ${file.name} (auto-selected for LLM)`, 'system');
           updateStatus('File uploaded successfully', 'success');
           fileInput.value = '';
           renderTabs();
