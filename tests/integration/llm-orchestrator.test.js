@@ -114,10 +114,10 @@ describe('🤖 LLM Orchestrator Multi-Tab Context Tests', () => {
     await orchestrator.analyzeContent('Test query', [1], 'api-key');
     await orchestrator.analyzeContent('Second query', [1], 'api-key');
 
-    const history = orchestrator.getHistory(10);
-    expect(history.length).toBe(2);
-    expect(history[0].query).toBe('Test query');
-    expect(history[1].query).toBe('Second query');
+    // Check internal history array directly
+    expect(orchestrator.requestHistory.length).toBe(2);
+    expect(orchestrator.requestHistory[0].query).toBe('Test query');
+    expect(orchestrator.requestHistory[1].query).toBe('Second query');
     global.testLog('  ✓ Tracked 2 requests in history');
   });
 
@@ -171,19 +171,17 @@ describe('🤖 LLM Orchestrator Multi-Tab Context Tests', () => {
       orchestrator._addToHistory({ query: `Query ${i}` });
     }
 
-    const history = orchestrator.getHistory(100);
-    expect(history.length).toBeLessThanOrEqual(5);
-    global.testLog(`  ✓ History limited to ${history.length} entries (max 5)`);
+    // Check internal history array directly
+    expect(orchestrator.requestHistory.length).toBeLessThanOrEqual(5);
+    global.testLog(`  ✓ History limited to ${orchestrator.requestHistory.length} entries (max 5)`);
   });
 
-  test('✅ Get browser explanation', () => {
-    orchestrator.setContentViews(new Map([[1, mockWebContentsView]]));
+  test('✅ Content views tracking', () => {
+    const views = new Map([[1, mockWebContentsView], [2, mockWebContentsView]]);
+    orchestrator.setContentViews(views);
 
-    const info = orchestrator.getBrowserExplanation();
-
-    expect(info.type).toBe('Electron WebContentsView');
-    expect(info.capabilities).toContain('extract_dom');
-    expect(info.activeViews).toBe(1);
-    global.testLog('  ✓ Browser environment info retrieved');
+    expect(orchestrator.contentViews.size).toBe(2);
+    expect(orchestrator.contentViews.get(1)).toBe(mockWebContentsView);
+    global.testLog('  ✓ Content views tracked correctly');
   });
 });
