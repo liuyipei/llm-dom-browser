@@ -63,13 +63,18 @@
 
       <div class="bookmarks-section">
         <h3>
-          <span>⭐ Bookmarks</span>
+          <div class="bookmarks-header-left">
+            <button id="bookmarksToggle" class="collapse-toggle" title="Toggle bookmarks section">▼</button>
+            <span>⭐ Bookmarks</span>
+          </div>
           <button id="bookmarkBtn" class="bookmark-btn button-small" title="Bookmark current tab">★</button>
         </h3>
-        <div class="bookmark-search">
-          <input type="text" id="bookmarkSearchInput" placeholder="Search bookmarks..." />
+        <div class="bookmarks-content">
+          <div class="bookmark-search">
+            <input type="text" id="bookmarkSearchInput" placeholder="Search bookmarks..." />
+          </div>
+          <div class="bookmark-list" id="bookmarkList"></div>
         </div>
-        <div class="bookmark-list" id="bookmarkList"></div>
       </div>
 
       <div class="input-section">
@@ -175,6 +180,7 @@
       const tabsSection = document.querySelector('.tabs-section');
       const inputSection = document.querySelector('.input-section');
       const bookmarksSection = document.querySelector('.bookmarks-section');
+      const bookmarksToggle = document.getElementById('bookmarksToggle');
       const bookmarkList = document.getElementById('bookmarkList');
       const bookmarkBtn = document.getElementById('bookmarkBtn');
       const bookmarkSearchInput = document.getElementById('bookmarkSearchInput');
@@ -234,6 +240,50 @@
             inputSection.classList.remove('collapsed');
             menuButton.classList.remove('active');
             menuButton.title = 'Hide menu sections';
+          }
+        },
+
+        init() {
+          this.isCollapsed = this.load();
+          this.apply();
+        }
+      };
+
+      /**
+       * Bookmarks section collapse management
+       */
+      const bookmarksState = {
+        isCollapsed: false,
+
+        load() {
+          try {
+            const collapsed = localStorage.getItem('llm-dom-bookmarks-collapsed');
+            return collapsed === 'true';
+          } catch (error) {
+            console.error('Error loading bookmarks state:', error);
+            return false;
+          }
+        },
+
+        save(collapsed) {
+          try {
+            localStorage.setItem('llm-dom-bookmarks-collapsed', collapsed.toString());
+          } catch (error) {
+            console.error('Error saving bookmarks state:', error);
+          }
+        },
+
+        toggle() {
+          this.isCollapsed = !this.isCollapsed;
+          this.apply();
+          this.save(this.isCollapsed);
+        },
+
+        apply() {
+          if (this.isCollapsed) {
+            bookmarksSection.classList.add('bookmarks-collapsed');
+          } else {
+            bookmarksSection.classList.remove('bookmarks-collapsed');
           }
         },
 
@@ -2051,6 +2101,7 @@
 
       // Event Listeners
       menuButton.addEventListener('click', () => menuState.toggle());
+      bookmarksToggle.addEventListener('click', () => bookmarksState.toggle());
       openBtn.addEventListener('click', handleOpenTab);
       uploadBtn.addEventListener('click', handleUploadFile);
       sendBtn.addEventListener('click', handleSendQuery);
@@ -2205,6 +2256,9 @@
       async function initialize() {
         // Initialize menu state
         menuState.init();
+
+        // Initialize bookmarks collapse state
+        bookmarksState.init();
 
         // Load providers
         await loadProviders();
