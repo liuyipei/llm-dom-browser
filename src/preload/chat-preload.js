@@ -190,6 +190,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Listen for bookmark toggle requests
+   */
+  onToggleBookmark: (callback) => {
+    const listener = (event) => {
+      callback();
+    };
+    ipcRenderer.on('toggle-bookmark', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('toggle-bookmark', listener);
+  },
+
+  /**
    * Update chat sidebar width (for resizable split)
    */
   updateChatWidth: (width) => {

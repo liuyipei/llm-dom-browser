@@ -2066,6 +2066,17 @@
         console.error('[UI] electronAPI.onActiveTabChanged not available!');
       }
 
+      // Listen for bookmark toggle requests from keyboard shortcut
+      if (window.electronAPI && window.electronAPI.onToggleBookmark) {
+        console.log('[UI] Setting up onToggleBookmark listener');
+        window.electronAPI.onToggleBookmark(() => {
+          console.log('[UI] Received toggle-bookmark event');
+          toggleBookmark();
+        });
+      } else {
+        console.error('[UI] electronAPI.onToggleBookmark not available!');
+      }
+
       // Initialize tabs on UI load - get all existing tabs from main process
       if (window.electronAPI && window.electronAPI.getAllTabs) {
         console.log('[UI] Initializing tabs on UI load');
