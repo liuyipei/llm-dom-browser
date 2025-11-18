@@ -98,6 +98,10 @@
         <button id="refreshModelsBtn" class="button-small" style="display: none;" title="Refresh models from local provider">Refresh</button>
       </div>
 
+      <div class="input-row" id="fireworksDeploymentRow" style="display: none;">
+        <input type="text" id="fireworksDeploymentInput" placeholder="Deployment ID (optional, e.g., accounts/user/deployments/12345678)" />
+      </div>
+
       <div id="ollamaManagement" style="display: none; margin-top: 10px; padding: 10px; border: 1px solid #444; border-radius: 4px; background: #2a2a2a;">
         <div style="font-weight: bold; margin-bottom: 8px;">Ollama Model Management</div>
         <div class="input-row">
@@ -686,6 +690,17 @@
           }
         }
 
+        // Show/hide Fireworks deployment field
+        if (newProvider === 'fireworks') {
+          fireworksDeploymentRow.style.display = 'flex';
+          const savedDeployment = storage.getFireworksDeployment();
+          if (savedDeployment) {
+            fireworksDeploymentInput.value = savedDeployment;
+          }
+        } else {
+          fireworksDeploymentRow.style.display = 'none';
+        }
+
         updateModelSelect();
       });
 
@@ -727,6 +742,24 @@
         clearTimeout(apiKeySaveTimeout);
         apiKeySaveTimeout = setTimeout(() => {
           storage.saveApiKey(provider, apiKey);
+        }, 500); // Save after 500ms of no typing
+      });
+
+      // Save Fireworks deployment ID on blur
+      fireworksDeploymentInput.addEventListener('blur', (e) => {
+        const deploymentId = e.target.value.trim();
+        storage.saveFireworksDeployment(deploymentId);
+      });
+
+      // Save Fireworks deployment ID on input (with debouncing)
+      let deploymentSaveTimeout;
+      fireworksDeploymentInput.addEventListener('input', (e) => {
+        const deploymentId = e.target.value.trim();
+
+        // Debounce saving to avoid excessive localStorage writes
+        clearTimeout(deploymentSaveTimeout);
+        deploymentSaveTimeout = setTimeout(() => {
+          storage.saveFireworksDeployment(deploymentId);
         }, 500); // Save after 500ms of no typing
       });
 
@@ -1024,11 +1057,20 @@
         const query = queryInput.value.trim();
         const apiKey = apiKeyInput.value.trim();
         const provider = providerSelect.value;
-        const model = modelSelect.value || null;
+        let model = modelSelect.value || null;
         const tabIds = Array.from(state.selectedTabs);
         const includeMedia = includeMediaCheckbox.checked;
         const isLocal = window.AppConfig.LOCAL_PROVIDERS.includes(provider);
         const customEndpoint = isLocal ? endpointInput.value.trim() : null;
+
+        // For Fireworks, append deployment ID if provided
+        if (provider === 'fireworks') {
+          const deploymentId = fireworksDeploymentInput.value.trim();
+          if (deploymentId && model) {
+            model = `${model}#${deploymentId}`;
+            console.log(`Using Fireworks deployment: ${model}`);
+          }
+        }
 
         if (!query) {
           updateStatus('Please enter a question', 'error');
@@ -1967,6 +2009,16 @@
         if (savedApiKey) {
           apiKeyInput.value = savedApiKey;
           console.log(`Restored API key on init for provider: ${provider}`);
+        }
+
+        // Show Fireworks deployment field if Fireworks is selected
+        if (provider === 'fireworks') {
+          fireworksDeploymentRow.style.display = 'flex';
+          const savedDeployment = storage.getFireworksDeployment();
+          if (savedDeployment) {
+            fireworksDeploymentInput.value = savedDeployment;
+            console.log(`Restored Fireworks deployment ID: ${savedDeployment}`);
+          }
         }
 
         // Load persisted tab management data
