@@ -82,6 +82,18 @@ const storage = {
     data.endpoints[provider] = endpoint;
     this.save(data);
     console.log(`Saved endpoint for ${provider}: ${endpoint}`);
+  },
+
+  getFireworksDeployment() {
+    const data = this.load();
+    return data.fireworksDeployment || '';
+  },
+
+  saveFireworksDeployment(deploymentId) {
+    const data = this.load();
+    data.fireworksDeployment = deploymentId;
+    this.save(data);
+    console.log(`Saved Fireworks deployment ID: ${deploymentId}`);
   }
 };
 
