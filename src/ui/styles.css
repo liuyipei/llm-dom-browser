@@ -233,21 +233,6 @@ body {
   border-color: #2980b9;
 }
 
-/* Pinned tab styles */
-.tab-item.pinned {
-  background: #e8f5e9;
-  border-left: 4px solid #4caf50;
-  font-weight: 600;
-  min-width: 80px;
-  max-width: 120px;
-}
-
-.tab-item.pinned .tab-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Dragging styles */
 .tab-item.dragging {
   opacity: 0.5;
@@ -256,36 +241,6 @@ body {
 
 .tab-item.drag-over {
   border-top: 3px solid #3498db;
-}
-
-/* Tab group styles */
-.tab-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  margin-top: 8px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  background: #f8f9fa;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.tab-group-header:first-child {
-  margin-top: 0;
-}
-
-.tab-group-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.tab-item.grouped {
-  margin-left: 12px;
-  border-left: 3px solid;
 }
 
 /* Recently closed tabs button */
@@ -303,26 +258,6 @@ body {
 
 .recently-closed-btn:hover {
   background: #bdc3c7;
-}
-
-/* Pin button */
-.pin-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 4px;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
-}
-
-.pin-btn:hover {
-  opacity: 1;
-}
-
-.pin-btn.pinned {
-  opacity: 1;
-  color: #4caf50;
 }
 
 .tab-item button {

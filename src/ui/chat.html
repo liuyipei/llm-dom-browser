@@ -128,9 +128,7 @@
         activeTabId: null, // Currently visible tab
         isLoading: false,
         currentProvider: null, // Track current provider for saving API key when switching
-        pinnedTabs: new Set(), // Set of pinned tab IDs
         tabOrder: [], // Array of tab IDs in display order
-        tabGroups: new Map(), // Map of tabId -> {groupName, color}
         closedTabs: [], // Array of recently closed tabs (max 20)
         draggedTabId: null // Currently dragged tab
       };
@@ -1140,8 +1138,6 @@
             const closedTabInfo = {
               url: tab.url,
               title: tab.title,
-              pinned: state.pinnedTabs.has(tabId),
-              group: state.tabGroups.get(tabId) || null,
               timestamp: Date.now()
             };
             state.closedTabs.push(closedTabInfo);
@@ -1149,14 +1145,12 @@
             if (state.closedTabs.length > 20) {
               state.closedTabs.shift();
             }
-            tabPersistence.save();
+            tabPersistence.save(state);
           }
 
           await window.electronAPI.closeTab(tabId);
           state.activeTabs.delete(tabId);
           state.selectedTabs.delete(tabId);
-          state.pinnedTabs.delete(tabId);
-          state.tabGroups.delete(tabId);
           addMessage(`Closed tab`, 'system');
           renderTabs();
         } catch (error) {
@@ -1190,64 +1184,21 @@
         renderTabs();
       }
 
-      /**
-       * Toggle pin status of a tab
-       */
-      function togglePinTab(tabId) {
-        if (state.pinnedTabs.has(tabId)) {
-          state.pinnedTabs.delete(tabId);
-        } else {
-          state.pinnedTabs.add(tabId);
-        }
-        tabPersistence.save();
-        renderTabs();
-      }
-
-      /**
-       * Prompt user to add tab to a group
-       */
-      function promptAddToGroup(tabId) {
-        const existingGroup = state.tabGroups.get(tabId);
-        const groupName = prompt(
-          'Enter group name:',
-          existingGroup ? existingGroup.groupName : ''
-        );
-
-        if (groupName === null) return; // User cancelled
-
-        if (groupName === '') {
-          // Remove from group
-          state.tabGroups.delete(tabId);
-        } else {
-          // Predefined colors
-          const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
-
-          // Check if group already exists
-          let groupColor = null;
-          state.tabGroups.forEach((info) => {
-            if (info.groupName === groupName) {
-              groupColor = info.color;
-            }
-          });
-
-          // If new group, pick a color
-          if (!groupColor) {
-            const usedColors = new Set();
-            state.tabGroups.forEach((info) => usedColors.add(info.color));
-            groupColor = colors.find(c => !usedColors.has(c)) || colors[0];
-          }
-
-          state.tabGroups.set(tabId, { groupName, color: groupColor });
-        }
-
-        tabPersistence.save();
-        renderTabs();
-      }
 
       /**
        * Drag and drop handlers
        */
       function handleDragStart(e) {
+        // Don't start drag if clicking on interactive elements
+        const target = e.target;
+        if (target.tagName === 'BUTTON' ||
+            target.tagName === 'INPUT' ||
+            target.closest('button') ||
+            target.closest('input')) {
+          e.preventDefault();
+          return;
+        }
+
         const tabId = e.currentTarget.dataset.tabId;
         state.draggedTabId = tabId;
         e.currentTarget.classList.add('dragging');
@@ -1395,29 +1346,13 @@
         try {
           await handleOpenTabUrl(closedTab.url);
 
-          // Restore pinned status and group
-          if (closedTab.pinned) {
-            // Find the newly opened tab (it should be the last one)
-            const newTabId = Array.from(state.activeTabs.keys()).pop();
-            if (newTabId) {
-              state.pinnedTabs.add(newTabId);
-            }
-          }
-
-          if (closedTab.group) {
-            const newTabId = Array.from(state.activeTabs.keys()).pop();
-            if (newTabId) {
-              state.tabGroups.set(newTabId, closedTab.group);
-            }
-          }
-
           // Remove from closed tabs
           const index = state.closedTabs.indexOf(closedTab);
           if (index !== -1) {
             state.closedTabs.splice(index, 1);
           }
 
-          tabPersistence.save();
+          tabPersistence.save(state);
           renderTabs();
         } catch (error) {
           updateStatus(`Error restoring tab: ${error.message}`, 'error');
@@ -1445,7 +1380,7 @@
       }
 
       /**
-       * Render tabs list with all features
+       * Render tabs list
        */
       function renderTabs() {
         tabList.innerHTML = '';
@@ -1464,43 +1399,12 @@
           });
         }
 
-        // Organize tabs by groups
-        const groupedTabs = new Map();
-        const ungroupedPinnedTabs = [];
-        const ungroupedTabs = [];
-
+        // Render all tabs in order
         state.tabOrder.forEach(tabId => {
-          if (!state.activeTabs.has(tabId)) return;
-
-          const isPinned = state.pinnedTabs.has(tabId);
-          const groupInfo = state.tabGroups.get(tabId);
-
-          if (groupInfo) {
-            if (!groupedTabs.has(groupInfo.groupName)) {
-              groupedTabs.set(groupInfo.groupName, []);
-            }
-            groupedTabs.get(groupInfo.groupName).push(tabId);
-          } else if (isPinned) {
-            ungroupedPinnedTabs.push(tabId);
-          } else {
-            ungroupedTabs.push(tabId);
+          if (state.activeTabs.has(tabId)) {
+            renderTabElement(tabId);
           }
         });
-
-        // Render pinned tabs first
-        if (ungroupedPinnedTabs.length > 0) {
-          ungroupedPinnedTabs.forEach(tabId => renderTabElement(tabId, true, false, null));
-        }
-
-        // Render grouped tabs
-        groupedTabs.forEach((tabIds, groupName) => {
-          const firstTabGroup = state.tabGroups.get(tabIds[0]);
-          renderGroupHeader(groupName, firstTabGroup.color);
-          tabIds.forEach(tabId => renderTabElement(tabId, false, true, firstTabGroup.color));
-        });
-
-        // Render ungrouped tabs
-        ungroupedTabs.forEach(tabId => renderTabElement(tabId, false, false, null));
 
         // Render recently closed tabs button
         if (state.closedTabs.length > 0) {
@@ -1511,7 +1415,7 @@
       /**
        * Render a single tab element
        */
-      function renderTabElement(tabId, isPinned, isGrouped, groupColor) {
+      function renderTabElement(tabId) {
         const tab = state.activeTabs.get(tabId);
         if (!tab) return;
 
@@ -1523,16 +1427,9 @@
         const classes = ['tab-item'];
         if (isSelected) classes.push('active');
         if (isCurrent) classes.push('current');
-        if (isPinned) classes.push('pinned');
-        if (isGrouped) classes.push('grouped');
         tabEl.className = classes.join(' ');
         tabEl.draggable = true;
         tabEl.dataset.tabId = tabId;
-
-        // Apply group color if grouped
-        if (isGrouped && groupColor) {
-          tabEl.style.borderLeftColor = groupColor;
-        }
 
         // Create checkbox
         const checkbox = document.createElement('input');
@@ -1540,19 +1437,10 @@
         checkbox.checked = isSelected;
         checkbox.style.cursor = 'pointer';
         checkbox.title = isSelected ? 'Remove from LLM query' : 'Include in LLM query';
+        checkbox.draggable = false; // Prevent drag interference
         checkbox.addEventListener('click', (e) => {
           e.stopPropagation();
           toggleTabSelection(tabId);
-        });
-
-        // Create pin button
-        const pinBtn = document.createElement('button');
-        pinBtn.className = 'pin-btn' + (isPinned ? ' pinned' : '');
-        pinBtn.innerHTML = isPinned ? '📌' : '📍';
-        pinBtn.title = isPinned ? 'Unpin tab' : 'Pin tab';
-        pinBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          togglePinTab(tabId);
         });
 
         // Create title span
@@ -1567,41 +1455,29 @@
         clickableDiv.className = 'clickable-area';
         clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px;';
         clickableDiv.title = isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab';
+        clickableDiv.draggable = false; // Prevent drag interference
         clickableDiv.appendChild(checkbox);
-        clickableDiv.appendChild(pinBtn);
         clickableDiv.appendChild(titleSpan);
         clickableDiv.addEventListener('click', (e) => {
-          if (e.target !== checkbox && e.target !== pinBtn) {
+          if (e.target !== checkbox) {
             switchTab(tabId);
           }
-        });
-
-        // Create buttons container
-        const buttonsDiv = document.createElement('div');
-        buttonsDiv.style.cssText = 'display: flex; gap: 4px; align-items: center;';
-
-        // Create group button
-        const groupBtn = document.createElement('button');
-        groupBtn.textContent = '🏷️';
-        groupBtn.className = 'button-small';
-        groupBtn.title = 'Add to group';
-        groupBtn.style.cssText = 'padding: 2px 6px; font-size: 12px;';
-        groupBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          promptAddToGroup(tabId);
         });
 
         // Create close button
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
         closeBtn.className = 'button-small';
-        closeBtn.addEventListener('click', () => closeTab(tabId));
-
-        buttonsDiv.appendChild(groupBtn);
-        buttonsDiv.appendChild(closeBtn);
+        closeBtn.draggable = false; // Prevent drag interference
+        closeBtn.addEventListener('click', (e) => {
+          console.log('Close button clicked for tab:', tabId);
+          e.stopPropagation();
+          e.preventDefault();
+          closeTab(tabId);
+        });
 
         tabEl.appendChild(clickableDiv);
-        tabEl.appendChild(buttonsDiv);
+        tabEl.appendChild(closeBtn);
 
         // Add drag and drop event listeners
         tabEl.addEventListener('dragstart', handleDragStart);
@@ -1611,41 +1487,6 @@
         tabEl.addEventListener('dragleave', handleDragLeave);
 
         tabList.appendChild(tabEl);
-      }
-
-      /**
-       * Render group header
-       */
-      function renderGroupHeader(groupName, color) {
-        const headerEl = document.createElement('div');
-        headerEl.className = 'tab-group-header';
-
-        const colorEl = document.createElement('div');
-        colorEl.className = 'tab-group-color';
-        colorEl.style.backgroundColor = color;
-
-        const nameEl = document.createElement('span');
-        nameEl.textContent = groupName;
-
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = '×';
-        removeBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; font-size: 16px; margin-left: auto; opacity: 0.6;';
-        removeBtn.title = 'Ungroup all tabs in this group';
-        removeBtn.addEventListener('click', () => {
-          // Remove all tabs from this group
-          state.tabGroups.forEach((info, tabId) => {
-            if (info.groupName === groupName) {
-              state.tabGroups.delete(tabId);
-            }
-          });
-          tabPersistence.save();
-          renderTabs();
-        });
-
-        headerEl.appendChild(colorEl);
-        headerEl.appendChild(nameEl);
-        headerEl.appendChild(removeBtn);
-        tabList.appendChild(headerEl);
       }
 
       /**
@@ -2023,12 +1864,8 @@
 
         // Load persisted tab management data
         const tabData = tabPersistence.load();
-        state.pinnedTabs = tabData.pinnedTabs;
-        state.tabGroups = tabData.tabGroups;
         state.closedTabs = tabData.closedTabs;
         console.log('Loaded tab management data:', {
-          pinnedTabs: Array.from(state.pinnedTabs),
-          tabGroups: Array.from(state.tabGroups.entries()),
           closedTabs: state.closedTabs.length
         });
 
@@ -2041,7 +1878,6 @@
         updateStatus('Ready', 'success');
         addMessage('👋 Welcome! Open a URL or upload a file to get started.', 'system');
         addMessage('💡 Tip: Press F12 to open DevTools for the UI, Ctrl+Shift+C for the active tab', 'system');
-        addMessage('🎨 New: Pin tabs (📌), drag to reorder, group tabs (🏷️), restore closed tabs (🕐)', 'system');
       }
 
       initialize();
