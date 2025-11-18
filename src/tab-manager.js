@@ -70,6 +70,34 @@ class TabManager {
         this.updateViewBounds();
       }
 
+      // Intercept Ctrl+Click and other window opening requests
+      // This is the correct way to handle Ctrl+Click in Electron
+      contentView.webContents.setWindowOpenHandler(({ url: newUrl, frameName, features, disposition }) => {
+        console.log(`[Tab ${tabId}] Window open request: ${newUrl}, disposition: ${disposition}, features: ${features}`);
+
+        // Disposition tells us how the window was requested:
+        // - 'foreground-tab': Ctrl+Shift+Click or Cmd+Shift+Click
+        // - 'background-tab': Ctrl+Click or Cmd+Click
+        // - 'new-window': target="_blank" without modifiers
+        // - 'other': window.open() or other methods
+
+        // Determine if we should activate the new tab
+        // Open in foreground for: foreground-tab and new-window (target="_blank")
+        // Open in background for: background-tab and other
+        const shouldActivate = disposition === 'foreground-tab' || disposition === 'new-window';
+
+        console.log(`[Tab ${tabId}] Opening URL in new ${shouldActivate ? 'foreground' : 'background'} tab: ${newUrl}`);
+
+        // Create new tab asynchronously (don't await here to avoid blocking)
+        this.openTab(newUrl, { activate: shouldActivate }).catch((error) => {
+          console.error(`[Tab ${tabId}] Failed to open new tab:`, error);
+        });
+
+        // DENY the request to prevent Electron from creating an actual new window
+        // This is the key difference from the preload script approach
+        return { action: 'deny' };
+      });
+
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
         console.log(`Tab ${tabId} started loading: ${url}`);
