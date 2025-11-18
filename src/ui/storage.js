@@ -105,21 +105,17 @@ const tabPersistence = {
       try {
         const parsed = JSON.parse(data);
         return {
-          pinnedTabs: new Set(parsed.pinnedTabs || []),
-          tabGroups: new Map(parsed.tabGroups || []),
           closedTabs: parsed.closedTabs || []
         };
       } catch (e) {
         console.error('Error loading tab management data:', e);
       }
     }
-    return { pinnedTabs: new Set(), tabGroups: new Map(), closedTabs: [] };
+    return { closedTabs: [] };
   },
 
   save(state) {
     const data = {
-      pinnedTabs: Array.from(state.pinnedTabs),
-      tabGroups: Array.from(state.tabGroups.entries()),
       closedTabs: state.closedTabs.slice(-20) // Keep only last 20
     };
     localStorage.setItem(STORAGE_KEYS.TAB_MANAGEMENT, JSON.stringify(data));
