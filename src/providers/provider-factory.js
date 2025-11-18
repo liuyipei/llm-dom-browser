@@ -1,20 +1,20 @@
 /**
  * Factory for creating LLM provider instances
- * Simplifies provider instantiation and configuration
- * Updated: November 2025 with new providers
+ * Simplified with configuration-driven approach
+ * Updated: November 2025 - Reduced boilerplate
  */
 
 const { PROVIDERS, DEFAULT_MODELS } = require('./models');
-const OpenAIProvider = require('./openai-provider');
+const { OPENAI_COMPATIBLE_CONFIGS } = require('./provider-config');
+
+// Base providers
+const OpenAICompatibleProvider = require('./openai-compatible-provider');
+
+// Custom providers (with specialized implementations)
 const AnthropicProvider = require('./anthropic-provider');
 const GeminiProvider = require('./gemini-provider');
-const XAIProvider = require('./xai-provider');
-const FireworksProvider = require('./fireworks-provider');
 const OpenRouterProvider = require('./openrouter-provider');
-const DeepSeekProvider = require('./deepseek-provider');
-const KimiProvider = require('./kimi-provider');
 const MiniMaxProvider = require('./minimax-provider');
-const GLMProvider = require('./glm-provider');
 const OllamaProvider = require('./ollama-provider');
 const VLLMProvider = require('./vllm-provider');
 const LMStudioProvider = require('./lmstudio-provider');
@@ -32,36 +32,31 @@ class ProviderFactory {
       config.model = DEFAULT_MODELS[providerName];
     }
 
-    switch (providerName.toLowerCase()) {
-      case PROVIDERS.OPENAI:
-        return new OpenAIProvider(config);
+    const provider = providerName.toLowerCase();
 
+    // Check if it's a simple OpenAI-compatible provider (config-driven)
+    if (OPENAI_COMPATIBLE_CONFIGS[provider]) {
+      const providerConfig = OPENAI_COMPATIBLE_CONFIGS[provider];
+      return new OpenAICompatibleProvider({
+        ...config,
+        baseUrl: config.baseUrl || providerConfig.baseUrl,
+        providerName: providerConfig.providerName
+      });
+    }
+
+    // Handle custom providers with specialized implementations
+    switch (provider) {
       case PROVIDERS.ANTHROPIC:
         return new AnthropicProvider(config);
 
       case PROVIDERS.GOOGLE:
         return new GeminiProvider(config);
 
-      case PROVIDERS.XAI:
-        return new XAIProvider(config);
-
       case PROVIDERS.OPENROUTER:
         return new OpenRouterProvider(config);
 
-      case PROVIDERS.FIREWORKS:
-        return new FireworksProvider(config);
-
-      case PROVIDERS.DEEPSEEK:
-        return new DeepSeekProvider(config);
-
-      case PROVIDERS.KIMI:
-        return new KimiProvider(config);
-
       case PROVIDERS.MINIMAX:
         return new MiniMaxProvider(config);
-
-      case PROVIDERS.GLM:
-        return new GLMProvider(config);
 
       case PROVIDERS.OLLAMA:
         return new OllamaProvider(config);
