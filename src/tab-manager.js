@@ -1,6 +1,7 @@
 const { WebContentsView } = require('electron');
 const path = require('path');
 const { generateId } = require('./utils');
+const { canNavigateBack, canNavigateForward } = require('./utils/view-helpers');
 
 /**
  * Tab Manager - Handles tab lifecycle operations
@@ -38,6 +39,50 @@ class TabManager {
    */
   setActiveTabId(tabId) {
     this.activeTabId = tabId;
+  }
+
+  /**
+   * Setup event listeners for a tab's WebContentsView
+   * Consolidates all event handling in one place
+   */
+  _setupTabEventListeners(contentView, tabId, url) {
+    // Listen for load start
+    contentView.webContents.on('did-start-loading', () => {
+      console.log(`Tab ${tabId} started loading: ${url}`);
+    });
+
+    // Listen for load failures
+    contentView.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      console.error(`Tab ${tabId} failed to load: ${errorDescription} (${errorCode}) - ${validatedURL}`);
+    });
+
+    // Listen for page load completion to update title
+    contentView.webContents.on('did-finish-load', () => {
+      const title = contentView.webContents.getTitle();
+      const currentUrl = contentView.webContents.getURL();
+      console.log(`Tab ${tabId} finished loading: ${title} (URL: ${currentUrl})`);
+
+      // Send title update to chat UI
+      if (this.chatView && this.chatView.webContents) {
+        this.chatView.webContents.send('tab-title-updated', { tabId, title });
+      }
+    });
+
+    // Listen for explicit title updates (some sites update title after load)
+    contentView.webContents.on('page-title-updated', (event, title) => {
+      console.log(`Tab ${tabId} title updated: ${title}`);
+
+      // Send title update to chat UI
+      if (this.chatView && this.chatView.webContents) {
+        this.chatView.webContents.send('tab-title-updated', { tabId, title });
+      }
+    });
+
+    // Listen for DOM ready (fires before did-finish-load)
+    contentView.webContents.on('dom-ready', () => {
+      const title = contentView.webContents.getTitle();
+      console.log(`Tab ${tabId} DOM ready: ${title}`);
+    });
   }
 
   /**
@@ -98,42 +143,8 @@ class TabManager {
         return { action: 'deny' };
       });
 
-      // Listen for various load events to help debug loading issues
-      contentView.webContents.on('did-start-loading', () => {
-        console.log(`Tab ${tabId} started loading: ${url}`);
-      });
-
-      contentView.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-        console.error(`Tab ${tabId} failed to load: ${errorDescription} (${errorCode}) - ${validatedURL}`);
-      });
-
-      // Listen for page load completion to update title
-      contentView.webContents.on('did-finish-load', () => {
-        const title = contentView.webContents.getTitle();
-        const currentUrl = contentView.webContents.getURL();
-        console.log(`Tab ${tabId} finished loading: ${title} (URL: ${currentUrl})`);
-
-        // Send title update to chat UI
-        if (this.chatView && this.chatView.webContents) {
-          this.chatView.webContents.send('tab-title-updated', { tabId, title });
-        }
-      });
-
-      // Also listen for explicit title updates (some sites update title after load)
-      contentView.webContents.on('page-title-updated', (event, title) => {
-        console.log(`Tab ${tabId} title updated: ${title}`);
-
-        // Send title update to chat UI
-        if (this.chatView && this.chatView.webContents) {
-          this.chatView.webContents.send('tab-title-updated', { tabId, title });
-        }
-      });
-
-      // Listen for DOM ready (fires before did-finish-load)
-      contentView.webContents.on('dom-ready', () => {
-        const title = contentView.webContents.getTitle();
-        console.log(`Tab ${tabId} DOM ready: ${title}`);
-      });
+      // Setup all event listeners for this tab
+      this._setupTabEventListeners(contentView, tabId, url);
 
       // Load the URL or PDF
       // Don't await - let event handlers track the load status
@@ -355,7 +366,7 @@ class TabManager {
     }
 
     const view = this.contentViews.get(this.activeTabId);
-    if (view && view.webContents && view.webContents.canGoBack()) {
+    if (canNavigateBack(view)) {
       view.webContents.goBack();
       console.log(`Navigated back in tab ${this.activeTabId}`);
       return { success: true };
@@ -373,7 +384,7 @@ class TabManager {
     }
 
     const view = this.contentViews.get(this.activeTabId);
-    if (view && view.webContents && view.webContents.canGoForward()) {
+    if (canNavigateForward(view)) {
       view.webContents.goForward();
       console.log(`Navigated forward in tab ${this.activeTabId}`);
       return { success: true };

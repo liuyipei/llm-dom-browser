@@ -7,34 +7,145 @@
 
 const { PROVIDER_ENDPOINTS, PROVIDERS } = require('./models');
 
+/**
+ * Configuration for remote provider API endpoints
+ */
+const REMOTE_PROVIDER_CONFIG = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/v1/models',
+    headers: (apiKey) => ({
+      'Authorization': apiKey ? `Bearer ${apiKey}` : undefined,
+      'HTTP-Referer': 'https://github.com/liuyipei/llm-dom-browser',
+      'X-Title': 'LLM-DOM-Browser'
+    }),
+    filter: null // No specific filter
+  },
+  fireworks: {
+    url: 'https://api.fireworks.ai/inference/v1/models',
+    headers: (apiKey) => ({
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    }),
+    filter: 'instruct' // Only instruct/chat models
+  }
+};
+
+/**
+ * Configuration for local provider API endpoints
+ */
+const LOCAL_PROVIDER_CONFIG = {
+  ollama: {
+    url: (endpoint) => `${endpoint}/api/tags`,
+    headers: () => ({ 'Content-Type': 'application/json' }),
+    parseResponse: (data) => (data.models || []).map(model => ({
+      id: model.name,
+      name: model.name,
+      size: model.size,
+      modified_at: model.modified_at,
+      digest: model.digest,
+      details: model.details
+    }))
+  },
+  vllm: {
+    url: (endpoint) => `${endpoint}/models`,
+    headers: (apiKey) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey || 'dummy-key'}`
+    }),
+    parseResponse: (data) => (data.data || []).map(model => ({
+      id: model.id,
+      name: model.id,
+      created: model.created,
+      owned_by: model.owned_by
+    }))
+  },
+  lmstudio: {
+    url: (endpoint) => `${endpoint}/models`,
+    headers: (apiKey) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey || 'lm-studio'}`
+    }),
+    parseResponse: (data) => (data.data || [])
+      .filter(model => model.id && !model.id.includes('placeholder'))
+      .map(model => ({
+        id: model.id,
+        name: model.id,
+        created: model.created
+      }))
+  }
+};
+
 class ModelDiscovery {
+  /**
+   * Generic fetch method for remote providers (OpenRouter, Fireworks)
+   * @param {string} provider - Provider name (openrouter, fireworks)
+   * @param {string} apiKey - API key
+   * @returns {Promise<Array>} - Array of model objects
+   */
+  static async _fetchRemoteProviderModels(provider, apiKey) {
+    const config = REMOTE_PROVIDER_CONFIG[provider];
+    if (!config) {
+      throw new Error(`Unknown remote provider: ${provider}`);
+    }
+
+    try {
+      const response = await fetch(config.url, {
+        headers: config.headers(apiKey)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${provider} models: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return this._filterAndSortModels(data.data || [], provider);
+    } catch (error) {
+      console.error(`Error fetching ${provider} models:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Generic fetch method for local providers (Ollama, vLLM, LM Studio)
+   * @param {string} provider - Provider name (ollama, vllm, lmstudio)
+   * @param {string} endpoint - Base endpoint URL
+   * @param {string} apiKey - Optional API key
+   * @returns {Promise<Array>} - Array of model objects
+   */
+  static async _fetchLocalProviderModels(provider, endpoint, apiKey) {
+    const config = LOCAL_PROVIDER_CONFIG[provider];
+    if (!config) {
+      throw new Error(`Unknown local provider: ${provider}`);
+    }
+
+    try {
+      const url = typeof config.url === 'function' ? config.url(endpoint) : config.url;
+      const headers = typeof config.headers === 'function' ? config.headers(apiKey) : config.headers;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${provider} models: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return config.parseResponse(data);
+    } catch (error) {
+      console.error(`Error fetching ${provider} models:`, error);
+      return [];
+    }
+  }
+
   /**
    * Fetch available models from OpenRouter
    * @param {string} apiKey - OpenRouter API key (optional for model list)
    * @returns {Promise<Array>} - Array of model objects
    */
   static async fetchOpenRouterModels(apiKey) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: {
-          'Authorization': apiKey ? `Bearer ${apiKey}` : undefined,
-          'HTTP-Referer': 'https://github.com/liuyipei/llm-dom-browser',
-          'X-Title': 'LLM-DOM-Browser'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch OpenRouter models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      // Filter and sort models
-      return this._filterAndSortModels(data.data || [], 'openrouter');
-    } catch (error) {
-      console.error('Error fetching OpenRouter models:', error);
-      return [];
-    }
+    return this._fetchRemoteProviderModels('openrouter', apiKey);
   }
 
   /**
@@ -43,26 +154,7 @@ class ModelDiscovery {
    * @returns {Promise<Array>} - Array of model objects
    */
   static async fetchFireworksModels(apiKey) {
-    try {
-      const response = await fetch('https://api.fireworks.ai/inference/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch Fireworks models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      // Filter and sort models
-      return this._filterAndSortModels(data.data || [], 'fireworks');
-    } catch (error) {
-      console.error('Error fetching Fireworks models:', error);
-      return [];
-    }
+    return this._fetchRemoteProviderModels('fireworks', apiKey);
   }
 
   /**
@@ -212,31 +304,7 @@ class ModelDiscovery {
    * @returns {Promise<Array>} - Array of model objects
    */
   static async fetchOllamaModels(endpoint = 'http://localhost:11434') {
-    try {
-      const response = await fetch(`${endpoint}/api/tags`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch Ollama models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return (data.models || []).map(model => ({
-        id: model.name,
-        name: model.name,
-        size: model.size,
-        modified_at: model.modified_at,
-        digest: model.digest,
-        details: model.details
-      }));
-    } catch (error) {
-      console.error('Error fetching Ollama models:', error);
-      return [];
-    }
+    return this._fetchLocalProviderModels('ollama', endpoint);
   }
 
   /**
@@ -246,30 +314,7 @@ class ModelDiscovery {
    * @returns {Promise<Array>} - Array of model objects
    */
   static async fetchVLLMModels(endpoint = 'http://localhost:8000/v1', apiKey = 'dummy-key') {
-    try {
-      const response = await fetch(`${endpoint}/models`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch vLLM models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return (data.data || []).map(model => ({
-        id: model.id,
-        name: model.id,
-        created: model.created,
-        owned_by: model.owned_by
-      }));
-    } catch (error) {
-      console.error('Error fetching vLLM models:', error);
-      return [];
-    }
+    return this._fetchLocalProviderModels('vllm', endpoint, apiKey);
   }
 
   /**
@@ -279,32 +324,7 @@ class ModelDiscovery {
    * @returns {Promise<Array>} - Array of model objects
    */
   static async fetchLMStudioModels(endpoint = 'http://localhost:1234/v1', apiKey = 'lm-studio') {
-    try {
-      const response = await fetch(`${endpoint}/models`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch LM Studio models: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return (data.data || []).filter(model => {
-        // Filter out placeholder models
-        return model.id && !model.id.includes('placeholder');
-      }).map(model => ({
-        id: model.id,
-        name: model.id,
-        created: model.created
-      }));
-    } catch (error) {
-      console.error('Error fetching LM Studio models:', error);
-      return [];
-    }
+    return this._fetchLocalProviderModels('lmstudio', endpoint, apiKey);
   }
 
   /**
@@ -399,19 +419,16 @@ class ModelDiscovery {
       };
     }
 
-    // Fetch models based on provider type
+    // Fetch models using generic method
     let models = [];
     try {
-      switch (provider) {
-        case PROVIDERS.OLLAMA:
-          models = await this.fetchOllamaModels(baseEndpoint);
-          break;
-        case PROVIDERS.VLLM:
-          models = await this.fetchVLLMModels(baseEndpoint, apiKey || 'dummy-key');
-          break;
-        case PROVIDERS.LMSTUDIO:
-          models = await this.fetchLMStudioModels(baseEndpoint, apiKey || 'lm-studio');
-          break;
+      const providerKey = provider === PROVIDERS.OLLAMA ? 'ollama'
+                        : provider === PROVIDERS.VLLM ? 'vllm'
+                        : provider === PROVIDERS.LMSTUDIO ? 'lmstudio'
+                        : null;
+
+      if (providerKey) {
+        models = await this._fetchLocalProviderModels(providerKey, baseEndpoint, apiKey);
       }
     } catch (error) {
       console.error(`Error fetching ${provider} models:`, error);
