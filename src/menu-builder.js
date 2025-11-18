@@ -1,4 +1,5 @@
 const { app, Menu } = require('electron');
+const { getShortcuts } = require('./shortcuts-config');
 
 /**
  * Menu Builder - Creates and manages application menu
@@ -26,6 +27,7 @@ class MenuBuilder {
    */
   createMenu() {
     const isMac = process.platform === 'darwin';
+    const shortcuts = getShortcuts(isMac);
 
     const template = [
       // App menu (macOS only)
@@ -49,7 +51,7 @@ class MenuBuilder {
         submenu: [
           {
             label: 'New Tab',
-            accelerator: 'CmdOrCtrl+T',
+            accelerator: shortcuts.newTab,
             click: () => {
               // Focus URL input in chat view
               if (this.chatView && this.chatView.webContents) {
@@ -61,7 +63,7 @@ class MenuBuilder {
           },
           {
             label: 'Close Tab',
-            accelerator: 'CmdOrCtrl+W',
+            accelerator: shortcuts.closeTab,
             click: () => {
               // Close active tab
               if (this.tabManager) {
@@ -71,7 +73,7 @@ class MenuBuilder {
           },
           {
             label: 'Reopen Closed Tab',
-            accelerator: 'CmdOrCtrl+Shift+T',
+            accelerator: shortcuts.reopenTab,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.reopenLastClosedTab();
@@ -81,7 +83,7 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Next Tab',
-            accelerator: isMac ? 'Cmd+Option+Right' : 'Ctrl+Tab',
+            accelerator: shortcuts.nextTab,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.nextTab();
@@ -90,7 +92,7 @@ class MenuBuilder {
           },
           {
             label: 'Previous Tab',
-            accelerator: isMac ? 'Cmd+Option+Left' : 'Ctrl+Shift+Tab',
+            accelerator: shortcuts.previousTab,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.previousTab();
@@ -100,7 +102,7 @@ class MenuBuilder {
           { type: 'separator' },
           ...(Array.from({ length: 8 }, (_, i) => ({
             label: `Jump to Tab ${i + 1}`,
-            accelerator: `CmdOrCtrl+${i + 1}`,
+            accelerator: shortcuts.jumpToTab(i + 1),
             click: () => {
               if (this.tabManager) {
                 this.tabManager.jumpToTab(i + 1);
@@ -109,7 +111,7 @@ class MenuBuilder {
           }))),
           {
             label: 'Jump to Last Tab',
-            accelerator: 'CmdOrCtrl+9',
+            accelerator: shortcuts.jumpToTab(9),
             click: () => {
               if (this.tabManager) {
                 const tabs = this.tabManager.getAllTabs();
@@ -122,14 +124,14 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Close Window',
-            accelerator: 'CmdOrCtrl+Shift+W',
+            accelerator: shortcuts.closeWindow,
             click: () => {
               if (this.mainWindow && !this.mainWindow.isDestroyed()) {
                 this.mainWindow.close();
               }
             }
           },
-          isMac ? { role: 'close' } : { role: 'quit', accelerator: 'Ctrl+Q' }
+          isMac ? { role: 'close' } : { role: 'quit', accelerator: shortcuts.quit }
         ]
       },
       // Edit menu
@@ -162,7 +164,7 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Find...',
-            accelerator: 'CmdOrCtrl+F',
+            accelerator: shortcuts.find,
             click: () => {
               const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
               if (activeTabId && this.contentViews) {
@@ -177,7 +179,7 @@ class MenuBuilder {
           },
           {
             label: 'Find Next',
-            accelerator: isMac ? 'Cmd+G' : 'F3',
+            accelerator: shortcuts.findNext,
             click: () => {
               const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
               if (activeTabId && this.contentViews) {
@@ -196,7 +198,7 @@ class MenuBuilder {
         submenu: [
           {
             label: 'Back',
-            accelerator: isMac ? 'Cmd+[' : 'Alt+Left',
+            accelerator: shortcuts.back,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.goBack();
@@ -205,7 +207,7 @@ class MenuBuilder {
           },
           {
             label: 'Forward',
-            accelerator: isMac ? 'Cmd+]' : 'Alt+Right',
+            accelerator: shortcuts.forward,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.goForward();
@@ -215,7 +217,7 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Reload',
-            accelerator: isMac ? 'Cmd+R' : 'F5',
+            accelerator: shortcuts.reload,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.reloadTab(false);
@@ -224,7 +226,7 @@ class MenuBuilder {
           },
           {
             label: 'Hard Reload',
-            accelerator: 'CmdOrCtrl+Shift+R',
+            accelerator: shortcuts.hardReload,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.reloadTab(true);
@@ -233,7 +235,7 @@ class MenuBuilder {
           },
           {
             label: 'Stop',
-            accelerator: isMac ? 'Cmd+.' : 'Esc',
+            accelerator: shortcuts.stop,
             click: () => {
               if (this.tabManager) {
                 this.tabManager.stopLoading();
@@ -243,7 +245,7 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Focus Address Bar',
-            accelerator: 'CmdOrCtrl+L',
+            accelerator: shortcuts.focusAddressBar,
             click: () => {
               if (this.chatView && this.chatView.webContents) {
                 this.chatView.webContents.executeJavaScript(`
@@ -261,7 +263,7 @@ class MenuBuilder {
         submenu: [
           {
             label: 'Developer Tools',
-            accelerator: isMac ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
+            accelerator: shortcuts.devTools,
             click: () => {
               const activeTabId = this.tabManager ? this.tabManager.getActiveTabId() : null;
               if (activeTabId && this.contentViews) {
@@ -278,7 +280,7 @@ class MenuBuilder {
           },
           {
             label: 'Chat DevTools',
-            accelerator: 'F12',
+            accelerator: shortcuts.chatDevTools,
             click: () => {
               if (this.chatView && this.chatView.webContents) {
                 if (this.chatView.webContents.isDevToolsOpened()) {
@@ -292,17 +294,17 @@ class MenuBuilder {
           { type: 'separator' },
           {
             label: 'Zoom In',
-            accelerator: 'CmdOrCtrl+Plus',
+            accelerator: shortcuts.zoomIn,
             role: 'zoomIn'
           },
           {
             label: 'Zoom Out',
-            accelerator: 'CmdOrCtrl+-',
+            accelerator: shortcuts.zoomOut,
             role: 'zoomOut'
           },
           {
             label: 'Actual Size',
-            accelerator: 'CmdOrCtrl+0',
+            accelerator: shortcuts.actualSize,
             role: 'resetZoom'
           },
           { type: 'separator' },
