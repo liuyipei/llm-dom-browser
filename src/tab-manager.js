@@ -103,7 +103,13 @@ class TabManager {
       });
 
       // Load the URL or PDF
-      await contentView.webContents.loadURL(url);
+      // Don't await - let event handlers track the load status
+      // This prevents ERR_ABORTED errors from blocking tab creation
+      contentView.webContents.loadURL(url).catch((error) => {
+        console.error(`Tab ${tabId} navigation error: ${error.message}`);
+        // Error is already logged by did-fail-load handler
+        // Tab is still created and user can retry
+      });
 
       // Set as active tab if it's the first tab
       if (!this.activeTabId) {
@@ -113,11 +119,11 @@ class TabManager {
         }
       }
 
-      // Get the current title (which might have already been set by events that fired during load)
+      // Get the current title (might be empty if page hasn't loaded yet)
       const currentTitle = contentView.webContents.getTitle();
 
       console.log(`Opened tab ${tabId} with URL: ${url}, initial title: ${currentTitle}`);
-      return { id: tabId, url, title: currentTitle, isActive: tabId === this.activeTabId };
+      return { id: tabId, url, title: currentTitle || 'Loading...', isActive: tabId === this.activeTabId };
     } catch (error) {
       console.error('Error opening tab:', error);
       throw error;
