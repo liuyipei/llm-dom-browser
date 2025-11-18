@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Get all tabs with their information (id, url, title, isActive)
+   */
+  getAllTabs: () => {
+    return ipcRenderer.invoke('get-all-tabs');
+  },
+
+  /**
    * Extract content from a tab for LLM analysis
    */
   extractContent: (tabId) => {

@@ -221,6 +221,22 @@ class TabManager {
   }
 
   /**
+   * Get all tabs with their full information (id, url, title, isActive)
+   */
+  getAllTabsInfo() {
+    const tabsInfo = [];
+    for (const [tabId, contentView] of this.contentViews.entries()) {
+      tabsInfo.push({
+        id: tabId,
+        url: contentView.webContents.getURL(),
+        title: contentView.webContents.getTitle(),
+        isActive: tabId === this.activeTabId
+      });
+    }
+    return tabsInfo;
+  }
+
+  /**
    * Navigate to the next tab
    */
   nextTab() {

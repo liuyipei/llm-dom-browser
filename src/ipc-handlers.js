@@ -56,6 +56,11 @@ class IPCHandlers {
     ipcMain.handle('switch-tab', (event, tabId) => {
       return this.tabManager.switchTab(tabId);
     });
+
+    // Handle IPC: Get all tabs with their information
+    ipcMain.handle('get-all-tabs', () => {
+      return this.tabManager.getAllTabsInfo();
+    });
   }
 
   /**
