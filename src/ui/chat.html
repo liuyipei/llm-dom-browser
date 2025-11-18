@@ -892,223 +892,86 @@
       function generateConversationHTML(conversation) {
         const { id, userMessage, assistantMessage, stats } = conversation;
 
-        // Escape HTML to prevent XSS
-        const escapeHtml = (text) => {
-          const div = document.createElement('div');
-          div.textContent = text;
-          return div.innerHTML;
-        };
-
         const timestamp = new Date().toLocaleString();
         const model = stats?.model || 'Unknown';
         const latency = stats?.latencyMs ? (stats.latencyMs / 1000).toFixed(2) + 's' : 'N/A';
 
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conversation #${id}</title>
-  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
-  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 20px;
-      background: #0d1117;
-      color: #c9d1d9;
-      line-height: 1.6;
-    }
-    .header {
-      border-bottom: 2px solid #30363d;
-      padding-bottom: 20px;
-      margin-bottom: 30px;
-    }
-    .header h1 {
-      margin: 0 0 10px 0;
-      color: #58a6ff;
-      font-size: 24px;
-    }
-    .header .meta {
-      font-size: 12px;
-      color: #8b949e;
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    .message-block {
-      margin-bottom: 30px;
-      padding: 20px;
-      border-radius: 6px;
-      border: 1px solid #30363d;
-    }
-    .user-message {
-      background: #161b22;
-      border-left: 4px solid #58a6ff;
-    }
-    .assistant-message {
-      background: #0d1117;
-      border-left: 4px solid #3fb950;
-    }
-    .message-label {
-      font-weight: bold;
-      font-size: 14px;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .user-label {
-      color: #58a6ff;
-    }
-    .assistant-label {
-      color: #3fb950;
-    }
-    .message-content {
-      font-size: 14px;
-    }
-    .message-content pre {
-      background: #161b22;
-      padding: 16px;
-      border-radius: 6px;
-      overflow-x: auto;
-      border: 1px solid #30363d;
-    }
-    .message-content code {
-      background: #161b22;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 85%;
-    }
-    .message-content pre code {
-      background: none;
-      padding: 0;
-    }
-    .message-content a {
-      color: #58a6ff;
-      text-decoration: none;
-    }
-    .message-content a:hover {
-      text-decoration: underline;
-    }
-    .token-badge {
-      display: inline-block;
-      background: #21262d;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 11px;
-      color: #8b949e;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Conversation #${id}</h1>
-    <div class="meta">
-      <span>📅 ${timestamp}</span>
-      <span>🤖 Model: ${model}</span>
-      <span>⏱ Latency: ${latency}</span>
-      <span>📊 Tokens: ${conversation.userTokens}↑ / ${conversation.assistantTokens}↓</span>
-    </div>
-  </div>
+        // Build HTML using string concatenation to avoid template literal issues
+        let html = '<!DOCTYPE html>\n';
+        html += '<html lang="en">\n';
+        html += '<head>\n';
+        html += '  <meta charset="UTF-8">\n';
+        html += '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+        html += '  <title>Conversation #' + id + '</title>\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"><\/script>\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"><\/script>\n';
+        html += '  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">\n';
+        html += '  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"><\/script>\n';
+        html += '  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>\n';
+        html += '  <style>\n';
+        html += '    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #0d1117; color: #c9d1d9; line-height: 1.6; }\n';
+        html += '    .header { border-bottom: 2px solid #30363d; padding-bottom: 20px; margin-bottom: 30px; }\n';
+        html += '    .header h1 { margin: 0 0 10px 0; color: #58a6ff; font-size: 24px; }\n';
+        html += '    .header .meta { font-size: 12px; color: #8b949e; display: flex; gap: 20px; flex-wrap: wrap; }\n';
+        html += '    .message-block { margin-bottom: 30px; padding: 20px; border-radius: 6px; border: 1px solid #30363d; }\n';
+        html += '    .user-message { background: #161b22; border-left: 4px solid #58a6ff; }\n';
+        html += '    .assistant-message { background: #0d1117; border-left: 4px solid #3fb950; }\n';
+        html += '    .message-label { font-weight: bold; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }\n';
+        html += '    .user-label { color: #58a6ff; }\n';
+        html += '    .assistant-label { color: #3fb950; }\n';
+        html += '    .message-content { font-size: 14px; }\n';
+        html += '    .message-content pre { background: #161b22; padding: 16px; border-radius: 6px; overflow-x: auto; border: 1px solid #30363d; }\n';
+        html += '    .message-content code { background: #161b22; padding: 2px 6px; border-radius: 3px; font-size: 85%; }\n';
+        html += '    .message-content pre code { background: none; padding: 0; }\n';
+        html += '    .message-content a { color: #58a6ff; text-decoration: none; }\n';
+        html += '    .message-content a:hover { text-decoration: underline; }\n';
+        html += '    .token-badge { display: inline-block; background: #21262d; padding: 2px 8px; border-radius: 12px; font-size: 11px; color: #8b949e; }\n';
+        html += '  </style>\n';
+        html += '</head>\n';
+        html += '<body>\n';
+        html += '  <div class="header">\n';
+        html += '    <h1>Conversation #' + id + '</h1>\n';
+        html += '    <div class="meta">\n';
+        html += '      <span>📅 ' + timestamp + '</span>\n';
+        html += '      <span>🤖 Model: ' + model + '</span>\n';
+        html += '      <span>⏱ Latency: ' + latency + '</span>\n';
+        html += '      <span>📊 Tokens: ' + conversation.userTokens + '↑ / ' + conversation.assistantTokens + '↓</span>\n';
+        html += '    </div>\n';
+        html += '  </div>\n';
+        html += '  <div class="message-block user-message">\n';
+        html += '    <div class="message-label user-label">\n';
+        html += '      👤 User Message\n';
+        html += '      <span class="token-badge">' + conversation.userTokens + ' tokens</span>\n';
+        html += '    </div>\n';
+        html += '    <div class="message-content" id="userContent"></div>\n';
+        html += '  </div>\n';
+        html += '  <div class="message-block assistant-message">\n';
+        html += '    <div class="message-label assistant-label">\n';
+        html += '      🤖 Assistant Response\n';
+        html += '      <span class="token-badge">' + conversation.assistantTokens + ' tokens</span>\n';
+        html += '    </div>\n';
+        html += '    <div class="message-content" id="assistantContent"></div>\n';
+        html += '  </div>\n';
+        html += '  <script>\n';
+        html += '    function renderMarkdown(text) {\n';
+        html += '      marked.setOptions({ highlight: function(code, lang) { if (lang && hljs.getLanguage(lang)) { try { return hljs.highlight(code, { language: lang }).value; } catch (err) { console.error("Highlighting error:", err); } } return hljs.highlightAuto(code).value; }, breaks: true, gfm: true });\n';
+        html += '      const displayMathPlaceholders = []; let processed = text.replace(/\\\\\\$\\\\\\$([\\\\s\\\\S]+?)\\\\\\$\\\\\\$/g, (match, math) => { const placeholder = "__DISPLAYMATH" + displayMathPlaceholders.length + "__"; try { const rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false, output: "html" }); displayMathPlaceholders.push(rendered); } catch (err) { displayMathPlaceholders.push(match); } return placeholder; });\n';
+        html += '      const inlineMathPlaceholders = []; processed = processed.replace(/\\\\\\$([^\\\\\\$\\\\n]+?)\\\\\\$/g, (match, math) => { const placeholder = "__INLINEMATH" + inlineMathPlaceholders.length + "__"; try { const rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false, output: "html" }); inlineMathPlaceholders.push(rendered); } catch (err) { inlineMathPlaceholders.push(match); } return placeholder; });\n';
+        html += '      let htmlOut = marked.parse(processed);\n';
+        html += '      displayMathPlaceholders.forEach((math, i) => { htmlOut = htmlOut.replace("__DISPLAYMATH" + i + "__", math); });\n';
+        html += '      inlineMathPlaceholders.forEach((math, i) => { htmlOut = htmlOut.replace("__INLINEMATH" + i + "__", math); });\n';
+        html += '      return DOMPurify.sanitize(htmlOut, { ADD_TAGS: ["math", "semantics", "mrow", "mi", "mo", "mn", "msup", "msub", "mfrac", "mtext"], ADD_ATTR: ["class", "style"] });\n';
+        html += '    }\n';
+        html += '    const userMessage = ' + JSON.stringify(userMessage) + ';\n';
+        html += '    const assistantMessage = ' + JSON.stringify(assistantMessage) + ';\n';
+        html += '    document.getElementById("userContent").innerHTML = renderMarkdown(userMessage);\n';
+        html += '    document.getElementById("assistantContent").innerHTML = renderMarkdown(assistantMessage);\n';
+        html += '  <\/script>\n';
+        html += '</body>\n';
+        html += '</html>';
 
-  <div class="message-block user-message">
-    <div class="message-label user-label">
-      👤 User Message
-      <span class="token-badge">${conversation.userTokens} tokens</span>
-    </div>
-    <div class="message-content" id="userContent"></div>
-  </div>
-
-  <div class="message-block assistant-message">
-    <div class="message-label assistant-label">
-      🤖 Assistant Response
-      <span class="token-badge">${conversation.assistantTokens} tokens</span>
-    </div>
-    <div class="message-content" id="assistantContent"></div>
-  </div>
-
-  <script` + `>
-    // Render markdown with syntax highlighting
-    function renderMarkdown(text) {
-      marked.setOptions({
-        highlight: function(code, lang) {
-          if (lang && hljs.getLanguage(lang)) {
-            try {
-              return hljs.highlight(code, { language: lang }).value;
-            } catch (err) {
-              console.error('Highlighting error:', err);
-            }
-          }
-          return hljs.highlightAuto(code).value;
-        },
-        breaks: true,
-        gfm: true
-      });
-
-      // Process LaTeX math
-      const displayMathPlaceholders = [];
-      let processed = text.replace(/\\$\\$([\\s\\S]+?)\\$\\$/g, (match, math) => {
-        const placeholder = '__DISPLAYMATH' + displayMathPlaceholders.length + '__';
-        try {
-          const rendered = katex.renderToString(math.trim(), {
-            displayMode: true,
-            throwOnError: false,
-            output: 'html'
-          });
-          displayMathPlaceholders.push(rendered);
-        } catch (err) {
-          displayMathPlaceholders.push(match);
-        }
-        return placeholder;
-      });
-
-      const inlineMathPlaceholders = [];
-      processed = processed.replace(/\\$([^\\$\\n]+?)\\$/g, (match, math) => {
-        const placeholder = '__INLINEMATH' + inlineMathPlaceholders.length + '__';
-        try {
-          const rendered = katex.renderToString(math.trim(), {
-            displayMode: false,
-            throwOnError: false,
-            output: 'html'
-          });
-          inlineMathPlaceholders.push(rendered);
-        } catch (err) {
-          inlineMathPlaceholders.push(match);
-        }
-        return placeholder;
-      });
-
-      let html = marked.parse(processed);
-
-      displayMathPlaceholders.forEach((math, i) => {
-        html = html.replace('__DISPLAYMATH' + i + '__', math);
-      });
-      inlineMathPlaceholders.forEach((math, i) => {
-        html = html.replace('__INLINEMATH' + i + '__', math);
-      });
-
-      return DOMPurify.sanitize(html, {
-        ADD_TAGS: ['math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtext'],
-        ADD_ATTR: ['class', 'style']
-      });
-    }
-
-    // Render both messages
-    const userMessage = ${JSON.stringify(userMessage)};
-    const assistantMessage = ${JSON.stringify(assistantMessage)};
-
-    document.getElementById('userContent').innerHTML = renderMarkdown(userMessage);
-    document.getElementById('assistantContent').innerHTML = renderMarkdown(assistantMessage);
-  </script` + `>
-</body>
-</html>`;
+        return html;
       }
 
       /**
