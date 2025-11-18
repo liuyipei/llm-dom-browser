@@ -1,0 +1,747 @@
+/**
+ * Main stylesheet for LLM-DOM Browser Chat UI
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: #2c3e50;
+  color: white;
+  padding: 16px;
+  border-bottom: 1px solid #34495e;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-content {
+  flex: 1;
+  text-align: center;
+}
+
+.header h1 {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.header p {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.menu-button {
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.menu-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.menu-button:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.menu-button.active {
+  background: rgba(52, 152, 219, 0.3);
+  border-color: #3498db;
+}
+
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+.message.user {
+  background: #3498db;
+  color: white;
+  align-self: flex-start;
+  margin-right: 20px;
+}
+
+.message.assistant {
+  background: #ecf0f1;
+  color: #333;
+  align-self: flex-end;
+  margin-left: 20px;
+}
+
+.message.system {
+  background: #f39c12;
+  color: white;
+  text-align: center;
+  font-size: 12px;
+  align-self: center;
+}
+
+.message.error {
+  background: #e74c3c;
+  color: white;
+  align-self: flex-end;
+  margin-left: 20px;
+}
+
+.message-stats {
+  font-size: 10px;
+  color: #7f8c8d;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.message-stats .stat-item {
+  display: inline-block;
+  margin-right: 12px;
+}
+
+.message-stats .stat-label {
+  font-weight: 600;
+}
+
+.message-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.message-container.user {
+  align-items: flex-start;
+}
+
+.message-container.assistant {
+  align-items: flex-end;
+}
+
+.tabs-section {
+  border-top: 1px solid #ddd;
+  padding: 12px;
+  background: #fafafa;
+  max-height: 150px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+}
+
+.tabs-section.collapsed {
+  max-height: 0;
+  padding: 0 12px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.tabs-section h3 {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.tabs-section .help-text {
+  font-size: 10px;
+  color: #999;
+  margin-bottom: 6px;
+  font-style: italic;
+}
+
+.tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tab-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: move;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.tab-item:hover {
+  background: #f0f0f0;
+}
+
+.tab-item .clickable-area:hover {
+  background: #e8f4f8;
+  border-radius: 3px;
+}
+
+.tab-item.active {
+  background: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+/* Don't apply light hover background when tab is selected (active) */
+.tab-item.active .clickable-area:hover {
+  background: #2980b9; /* Darker blue for hover on selected tabs */
+}
+
+.tab-item.current {
+  border: 2px solid #e67e22;
+  border-left: 4px solid #e67e22;
+  background: #fef5e7;
+}
+
+.tab-item.current.active {
+  background: #3498db;
+  border-color: #2980b9;
+}
+
+/* Pinned tab styles */
+.tab-item.pinned {
+  background: #e8f5e9;
+  border-left: 4px solid #4caf50;
+  font-weight: 600;
+  min-width: 80px;
+  max-width: 120px;
+}
+
+.tab-item.pinned .tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dragging styles */
+.tab-item.dragging {
+  opacity: 0.5;
+  background: #ecf0f1;
+}
+
+.tab-item.drag-over {
+  border-top: 3px solid #3498db;
+}
+
+/* Tab group styles */
+.tab-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #f8f9fa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tab-group-header:first-child {
+  margin-top: 0;
+}
+
+.tab-group-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.tab-item.grouped {
+  margin-left: 12px;
+  border-left: 3px solid;
+}
+
+/* Recently closed tabs button */
+.recently-closed-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11px;
+  background: #ecf0f1;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recently-closed-btn:hover {
+  background: #bdc3c7;
+}
+
+/* Pin button */
+.pin-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.pin-btn:hover {
+  opacity: 1;
+}
+
+.pin-btn.pinned {
+  opacity: 1;
+  color: #4caf50;
+}
+
+.tab-item button {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tab-item button:hover {
+  background: #c0392b;
+}
+
+.input-section {
+  border-top: 1px solid #ddd;
+  padding: 12px;
+  padding-bottom: 20px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.input-section.collapsed {
+  max-height: 0;
+  padding: 0 12px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+input[type='text'],
+input[type='password'],
+input[type='file'],
+select {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+select {
+  cursor: pointer;
+  background: white;
+}
+
+#modelSearchInput {
+  font-size: 11px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  transition: all 0.2s ease;
+}
+
+#modelSearchInput:focus {
+  outline: none;
+  border-color: #4CAF50;
+  background: white;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+#modelSearchInput::placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+.input-row label {
+  min-width: 70px;
+  font-size: 12px;
+  color: #555;
+  font-weight: 500;
+}
+
+button {
+  padding: 8px 12px;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+button:hover {
+  background: #229954;
+}
+
+button:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+.button-small {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.status {
+  font-size: 11px;
+  color: #666;
+  padding: 4px 0;
+}
+
+.error {
+  color: #e74c3c;
+}
+
+.success {
+  color: #27ae60;
+}
+
+/* Message controls (copy button and toggle) */
+.message-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.message-controls button {
+  padding: 4px 8px;
+  font-size: 10px;
+  background: #95a5a6;
+  border-radius: 3px;
+}
+
+.message-controls button:hover {
+  background: #7f8c8d;
+}
+
+.message-controls .copy-btn {
+  background: #3498db;
+}
+
+.message-controls .copy-btn:hover {
+  background: #2980b9;
+}
+
+.message-controls .copy-btn.copied {
+  background: #27ae60;
+}
+
+.message-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+}
+
+.message-controls input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* Rendered content styling */
+.message-content {
+  line-height: 1.6;
+}
+
+.message-content pre {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.message-content code {
+  background: #f6f8fa;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+}
+
+.message-content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.message-content blockquote {
+  border-left: 4px solid #d0d7de;
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #57606a;
+}
+
+.message-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.message-content table th,
+.message-content table td {
+  border: 1px solid #d0d7de;
+  padding: 8px;
+  text-align: left;
+}
+
+.message-content table th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.message-content h1 { font-size: 1.5em; }
+.message-content h2 { font-size: 1.3em; }
+.message-content h3 { font-size: 1.1em; }
+
+.message-content ul,
+.message-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.message-content li {
+  margin: 4px 0;
+}
+
+.message-content p {
+  margin: 8px 0;
+}
+
+.message-content a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+/* Math rendering */
+.message-content .katex {
+  font-size: 1.1em;
+}
+
+.message-content .katex-display {
+  margin: 16px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Raw text view */
+.message-raw {
+  white-space: pre-wrap;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+}
+
+/* Resizer for split pane */
+.resizer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 5px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 9999;
+  transition: background 0.2s ease;
+}
+
+.resizer:hover,
+.resizer.dragging {
+  background: #3498db;
+}
+
+/* Bookmark section styles */
+.bookmarks-section {
+  border-top: 1px solid #ddd;
+  padding: 12px;
+  background: #fafafa;
+  max-height: 200px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+}
+
+.bookmarks-section.collapsed {
+  max-height: 0;
+  padding: 0 12px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.bookmarks-section h3 {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #666;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bookmark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bookmark-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.bookmark-item:hover {
+  background: #e8f4f8;
+}
+
+.bookmark-info {
+  flex: 1;
+  min-width: 0;
+  margin-right: 8px;
+}
+
+.bookmark-title {
+  font-weight: 500;
+  color: #2c3e50;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.bookmark-url {
+  font-size: 10px;
+  color: #7f8c8d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bookmark-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.bookmark-actions button {
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.bookmark-btn {
+  background: #f39c12;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.bookmark-btn:hover {
+  background: #e67e22;
+}
+
+.bookmark-btn.bookmarked {
+  background: #e74c3c;
+}
+
+.bookmark-btn.bookmarked:hover {
+  background: #c0392b;
+}
+
+.bookmark-search {
+  margin-bottom: 8px;
+}
+
+.bookmark-search input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.bookmark-empty {
+  text-align: center;
+  color: #999;
+  font-size: 11px;
+  padding: 12px;
+  font-style: italic;
+}
