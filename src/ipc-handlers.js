@@ -42,6 +42,8 @@ class IPCHandlers {
    * Register tab-related IPC handlers
    */
   registerTabHandlers() {
+    console.log('[IPC Handlers] Registering tab handlers, tabManager:', !!this.tabManager);
+
     // Handle IPC: Open new tab with URL or PDF
     ipcMain.handle('open-tab', async (event, url) => {
       return await this.tabManager.openTab(url);
@@ -51,10 +53,19 @@ class IPCHandlers {
     // This is sent from content-preload.js when user Ctrl+clicks or middle-clicks a link
     ipcMain.on('open-link-in-new-tab', async (event, { url, foreground }) => {
       try {
-        console.log(`Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
-        await this.tabManager.openTab(url, { activate: foreground });
+        console.log(`[IPC Handler] Received open-link-in-new-tab request: ${url}, foreground: ${foreground}`);
+
+        if (!this.tabManager) {
+          console.error('[IPC Handler] ERROR: tabManager is not initialized!');
+          return;
+        }
+
+        console.log(`[IPC Handler] Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
+        const result = await this.tabManager.openTab(url, { activate: foreground });
+        console.log(`[IPC Handler] Successfully opened tab:`, result);
       } catch (error) {
-        console.error('Error opening link in new tab:', error);
+        console.error('[IPC Handler] Error opening link in new tab:', error);
+        console.error('[IPC Handler] Error stack:', error.stack);
       }
     });
 
