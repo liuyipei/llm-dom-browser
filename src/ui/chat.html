@@ -140,8 +140,8 @@
         draggedTabId: null, // Currently dragged tab
         sortMode: 'manual', // Tab sort mode: 'manual', 'url', or 'time'
         tabLastViewTime: new Map(), // Track last view time for each tab
-        messageTabCounter: 0, // Strictly increasing counter for message tab IDs
-        messageTabCount: 0 // Count of message tabs created
+        conversationCounter: 0, // Strictly increasing counter for conversation IDs
+        pendingConversation: null // Temporarily stores user message until assistant responds
       };
 
       // DOM Elements
@@ -876,6 +876,105 @@
       }
 
       /**
+       * Estimate token count from text (rough approximation: 1 token ≈ 4 characters)
+       * @param {string} text - The text to estimate tokens for
+       * @returns {number} - Estimated token count
+       */
+      function estimateTokenCount(text) {
+        return Math.ceil(text.length / 4);
+      }
+
+      /**
+       * Generate HTML page for a conversation (user message + assistant response)
+       * @param {Object} conversation - Conversation data
+       * @returns {string} - Complete HTML document
+       */
+      function generateConversationHTML(conversation) {
+        const { id, userMessage, assistantMessage, stats } = conversation;
+
+        const timestamp = new Date().toLocaleString();
+        const model = stats?.model || 'Unknown';
+        const latency = stats?.latencyMs ? (stats.latencyMs / 1000).toFixed(2) + 's' : 'N/A';
+
+        // Build HTML using string concatenation to avoid template literal issues
+        let html = '<!DOCTYPE html>\n';
+        html += '<html lang="en">\n';
+        html += '<head>\n';
+        html += '  <meta charset="UTF-8">\n';
+        html += '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+        html += '  <title>Conversation #' + id + '</title>\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"><\/script>\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"><\/script>\n';
+        html += '  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">\n';
+        html += '  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"><\/script>\n';
+        html += '  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">\n';
+        html += '  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>\n';
+        html += '  <style>\n';
+        html += '    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #ffffff; color: #24292f; line-height: 1.6; }\n';
+        html += '    .header { border-bottom: 2px solid #d0d7de; padding-bottom: 20px; margin-bottom: 30px; }\n';
+        html += '    .header h1 { margin: 0 0 10px 0; color: #0969da; font-size: 24px; }\n';
+        html += '    .header .meta { font-size: 12px; color: #57606a; display: flex; gap: 20px; flex-wrap: wrap; }\n';
+        html += '    .message-block { margin-bottom: 30px; padding: 20px; border-radius: 6px; border: 1px solid #d0d7de; }\n';
+        html += '    .user-message { background: #f6f8fa; border-left: 4px solid #0969da; }\n';
+        html += '    .assistant-message { background: #ffffff; border-left: 4px solid #1a7f37; }\n';
+        html += '    .message-label { font-weight: bold; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }\n';
+        html += '    .user-label { color: #0969da; }\n';
+        html += '    .assistant-label { color: #1a7f37; }\n';
+        html += '    .message-content { font-size: 14px; }\n';
+        html += '    .message-content pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; border: 1px solid #d0d7de; }\n';
+        html += '    .message-content code { background: #f6f8fa; padding: 2px 6px; border-radius: 3px; font-size: 85%; }\n';
+        html += '    .message-content pre code { background: none; padding: 0; }\n';
+        html += '    .message-content a { color: #0969da; text-decoration: none; }\n';
+        html += '    .message-content a:hover { text-decoration: underline; }\n';
+        html += '    .token-badge { display: inline-block; background: #f6f8fa; padding: 2px 8px; border-radius: 12px; font-size: 11px; color: #57606a; border: 1px solid #d0d7de; }\n';
+        html += '  </style>\n';
+        html += '</head>\n';
+        html += '<body>\n';
+        html += '  <div class="header">\n';
+        html += '    <h1>Conversation #' + id + '</h1>\n';
+        html += '    <div class="meta">\n';
+        html += '      <span>📅 ' + timestamp + '</span>\n';
+        html += '      <span>🤖 Model: ' + model + '</span>\n';
+        html += '      <span>⏱ Latency: ' + latency + '</span>\n';
+        html += '      <span>📊 Tokens: ' + conversation.userTokens + '↑ / ' + conversation.assistantTokens + '↓</span>\n';
+        html += '    </div>\n';
+        html += '  </div>\n';
+        html += '  <div class="message-block user-message">\n';
+        html += '    <div class="message-label user-label">\n';
+        html += '      👤 User Message\n';
+        html += '      <span class="token-badge">' + conversation.userTokens + ' tokens</span>\n';
+        html += '    </div>\n';
+        html += '    <div class="message-content" id="userContent"></div>\n';
+        html += '  </div>\n';
+        html += '  <div class="message-block assistant-message">\n';
+        html += '    <div class="message-label assistant-label">\n';
+        html += '      🤖 Assistant Response\n';
+        html += '      <span class="token-badge">' + conversation.assistantTokens + ' tokens</span>\n';
+        html += '    </div>\n';
+        html += '    <div class="message-content" id="assistantContent"></div>\n';
+        html += '  </div>\n';
+        html += '  <script>\n';
+        html += '    function renderMarkdown(text) {\n';
+        html += '      marked.setOptions({ highlight: function(code, lang) { if (lang && hljs.getLanguage(lang)) { try { return hljs.highlight(code, { language: lang }).value; } catch (err) { console.error("Highlighting error:", err); } } return hljs.highlightAuto(code).value; }, breaks: true, gfm: true });\n';
+        html += '      const displayMathPlaceholders = []; let processed = text.replace(/\\\\\\$\\\\\\$([\\\\s\\\\S]+?)\\\\\\$\\\\\\$/g, (match, math) => { const placeholder = "__DISPLAYMATH" + displayMathPlaceholders.length + "__"; try { const rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false, output: "html" }); displayMathPlaceholders.push(rendered); } catch (err) { displayMathPlaceholders.push(match); } return placeholder; });\n';
+        html += '      const inlineMathPlaceholders = []; processed = processed.replace(/\\\\\\$([^\\\\\\$\\\\n]+?)\\\\\\$/g, (match, math) => { const placeholder = "__INLINEMATH" + inlineMathPlaceholders.length + "__"; try { const rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false, output: "html" }); inlineMathPlaceholders.push(rendered); } catch (err) { inlineMathPlaceholders.push(match); } return placeholder; });\n';
+        html += '      let htmlOut = marked.parse(processed);\n';
+        html += '      displayMathPlaceholders.forEach((math, i) => { htmlOut = htmlOut.replace("__DISPLAYMATH" + i + "__", math); });\n';
+        html += '      inlineMathPlaceholders.forEach((math, i) => { htmlOut = htmlOut.replace("__INLINEMATH" + i + "__", math); });\n';
+        html += '      return DOMPurify.sanitize(htmlOut, { ADD_TAGS: ["math", "semantics", "mrow", "mi", "mo", "mn", "msup", "msub", "mfrac", "mtext"], ADD_ATTR: ["class", "style"] });\n';
+        html += '    }\n';
+        html += '    const userMessage = ' + JSON.stringify(userMessage) + ';\n';
+        html += '    const assistantMessage = ' + JSON.stringify(assistantMessage) + ';\n';
+        html += '    document.getElementById("userContent").innerHTML = renderMarkdown(userMessage);\n';
+        html += '    document.getElementById("assistantContent").innerHTML = renderMarkdown(assistantMessage);\n';
+        html += '  <\/script>\n';
+        html += '</body>\n';
+        html += '</html>';
+
+        return html;
+      }
+
+      /**
        * Get first N words from text for tab naming
        * @param {string} text - The text to extract words from
        * @param {number} wordCount - Number of words to extract
@@ -908,31 +1007,60 @@
       }
 
       /**
-       * Create a message tab with formatted content
-       * @param {string} text - The message text
-       * @param {string} type - Message type: 'user' or 'assistant'
-       * @param {Object} stats - Optional stats to display
+       * Create a conversation tab with user message and assistant response
+       * @param {string} userMessage - The user's message
+       * @param {string} assistantMessage - The assistant's response
+       * @param {Object} stats - Stats from the LLM response
        * @returns {string} - The created tab ID
        */
-      function createMessageTab(text, type, stats = null) {
-        // Increment counters
-        state.messageTabCounter++;
-        state.messageTabCount++;
+      function createConversationTab(userMessage, assistantMessage, stats = null) {
+        // Increment conversation counter
+        state.conversationCounter++;
 
         // Create tab ID
-        const tabId = `message_${state.messageTabCounter}`;
+        const tabId = `conversation_${state.conversationCounter}`;
 
-        // Create tab name: first few words + tab count + integer ID
-        const firstWords = getFirstWords(text, 4);
-        const tabTitle = `${firstWords} [${state.messageTabCount}#${state.messageTabCounter}]`;
+        // Extract token counts
+        const userTokens = state.pendingConversation?.estimatedTokens || estimateTokenCount(userMessage);
+        let assistantTokens = estimateTokenCount(assistantMessage);
+
+        // Use actual token count from API if available
+        if (stats?.usage) {
+          if (stats.usage.output_tokens !== undefined) {
+            assistantTokens = stats.usage.output_tokens;
+          } else if (stats.usage.completion_tokens !== undefined) {
+            assistantTokens = stats.usage.completion_tokens;
+          }
+        }
+
+        // Create tab title: first words from user message + ID + token counts
+        const firstWords = getFirstWords(userMessage, 4);
+        const tabTitle = `${firstWords}... [${state.conversationCounter}] (${userTokens}↑ / ${assistantTokens}↓)`;
+
+        // Generate HTML for the conversation
+        const conversationData = {
+          id: state.conversationCounter,
+          userMessage,
+          userTokens,
+          assistantMessage,
+          assistantTokens,
+          stats,
+          timestamp: Date.now()
+        };
+
+        const htmlContent = generateConversationHTML(conversationData);
 
         // Store tab data
         const tabData = {
-          type: 'message', // Mark as message tab
-          messageType: type, // 'user' or 'assistant'
+          type: 'conversation',
+          id: state.conversationCounter,
           title: tabTitle,
-          text: text,
-          stats: stats,
+          htmlContent: htmlContent,
+          userMessage,
+          assistantMessage,
+          userTokens,
+          assistantTokens,
+          stats,
           timestamp: Date.now()
         };
 
@@ -942,301 +1070,87 @@
         // Add to tab order
         state.tabOrder.push(tabId);
 
-        // Render tabs to show the new message tab
+        // Render tabs to show the new conversation tab
         renderTabs();
+
+        // Clear pending conversation
+        state.pendingConversation = null;
 
         return tabId;
       }
 
       /**
-       * Add message to chat (shows only metadata in chatContainer, creates tab for full content)
+       * Add message to chat container
        * @param {string} text - The message text
-       * @param {string} type - Message type: 'user', 'assistant', 'system', 'error'
-       * @param {Object} stats - Optional stats to display (latency, tokens, etc.)
+       * @param {string} type - Message type: 'system' or 'error'
        */
-      function addMessage(text, type = 'assistant', stats = null) {
-        // For user and assistant messages, create tab and show metadata
-        const isFormattable = (type === 'user' || type === 'assistant');
+      function addMessage(text, type = 'system') {
+        // Only show system/error messages in chat container
+        const containerEl = document.createElement('div');
+        containerEl.className = `message-container ${type}`;
 
-        if (isFormattable) {
-          // Create message tab with full formatted content
-          const tabId = createMessageTab(text, type, stats);
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${type}`;
+        messageEl.textContent = text;
 
-          // Show only metadata in chat container
-          const containerEl = document.createElement('div');
-          containerEl.className = `message-container ${type}`;
-
-          const messageEl = document.createElement('div');
-          messageEl.className = `message ${type}`;
-          messageEl.style.cursor = 'pointer';
-          messageEl.title = 'Click to view in tab';
-
-          // Show metadata: type, timestamp, and truncated text
-          const metadataDiv = document.createElement('div');
-          metadataDiv.style.cssText = 'font-family: monospace; font-size: 11px;';
-
-          const typeLabel = type === 'user' ? '👤 User' : '🤖 Assistant';
-          const timestamp = new Date().toLocaleTimeString();
-          const truncated = truncateText(text, 80);
-
-          metadataDiv.textContent = `${typeLabel} [${timestamp}]: ${truncated}`;
-
-          messageEl.appendChild(metadataDiv);
-
-          // Add stats if provided (for assistant messages)
-          if (stats && type === 'assistant') {
-            const statsEl = document.createElement('div');
-            statsEl.className = 'message-stats';
-            statsEl.style.fontSize = '10px';
-
-            const statItems = [];
-
-            if (stats.latencyMs !== undefined) {
-              statItems.push(`${(stats.latencyMs / 1000).toFixed(2)}s`);
-            }
-
-            if (stats.usage) {
-              const usage = stats.usage;
-              if (usage.input_tokens !== undefined && usage.output_tokens !== undefined) {
-                statItems.push(`${usage.input_tokens + usage.output_tokens} tokens`);
-              } else if (usage.prompt_tokens !== undefined && usage.completion_tokens !== undefined) {
-                statItems.push(`${usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens)} tokens`);
-              }
-            }
-
-            if (stats.model) {
-              statItems.push(stats.model);
-            }
-
-            statsEl.textContent = statItems.join(' • ');
-            messageEl.appendChild(statsEl);
-          }
-
-          // Click to switch to message tab
-          messageEl.addEventListener('click', () => {
-            switchToMessageTab(tabId);
-          });
-
-          containerEl.appendChild(messageEl);
-          chatContainer.appendChild(containerEl);
-        } else {
-          // For system/error messages, show as before (full text, no tab)
-          const containerEl = document.createElement('div');
-          containerEl.className = `message-container ${type}`;
-
-          const messageEl = document.createElement('div');
-          messageEl.className = `message ${type}`;
-          messageEl.textContent = text;
-
-          containerEl.appendChild(messageEl);
-          chatContainer.appendChild(containerEl);
-        }
-
+        containerEl.appendChild(messageEl);
+        chatContainer.appendChild(containerEl);
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
 
       /**
-       * Switch to and display a message tab
-       * @param {string} tabId - The message tab ID
+       * Add conversation summary to chat container (minimal metadata only)
+       * @param {string} tabId - The conversation tab ID
+       * @param {number} conversationId - The conversation number
+       * @param {number} userTokens - User message token count
+       * @param {number} assistantTokens - Assistant response token count
+       * @param {Object} stats - Stats from the LLM response
        */
-      function switchToMessageTab(tabId) {
-        const tab = state.activeTabs.get(tabId);
-        if (!tab || tab.type !== 'message') {
-          console.error('Invalid message tab:', tabId);
-          return;
+      function addConversationToChat(tabId, conversationId, userTokens, assistantTokens, stats) {
+        const containerEl = document.createElement('div');
+        containerEl.className = 'message-container conversation';
+        containerEl.style.cursor = 'pointer';
+        containerEl.title = 'Click to view full conversation in browser';
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'message conversation';
+
+        // Show minimal metadata only
+        const metadataDiv = document.createElement('div');
+        metadataDiv.style.cssText = 'font-family: monospace; font-size: 11px;';
+
+        const timestamp = new Date().toLocaleTimeString();
+        metadataDiv.textContent = `💬 Conversation #${conversationId} [${timestamp}]`;
+        messageEl.appendChild(metadataDiv);
+
+        // Add stats
+        const statsEl = document.createElement('div');
+        statsEl.className = 'message-stats';
+        statsEl.style.fontSize = '10px';
+
+        const statItems = [];
+
+        if (stats.latencyMs !== undefined) {
+          statItems.push(`⏱ ${(stats.latencyMs / 1000).toFixed(2)}s`);
         }
 
-        // Create modal overlay to show message content
-        const overlay = document.createElement('div');
-        overlay.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0,0,0,0.7);
-          z-index: 9999;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        `;
+        statItems.push(`📊 ${userTokens}↑ / ${assistantTokens}↓`);
 
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-          background: #1e1e1e;
-          color: #d4d4d4;
-          border-radius: 8px;
-          max-width: 900px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-          position: relative;
-        `;
-
-        // Header
-        const header = document.createElement('div');
-        header.style.cssText = `
-          padding: 16px 20px;
-          border-bottom: 1px solid #444;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          position: sticky;
-          top: 0;
-          background: #1e1e1e;
-          z-index: 1;
-        `;
-
-        const title = document.createElement('h3');
-        title.textContent = tab.title;
-        title.style.cssText = 'margin: 0; font-size: 14px; color: #fff;';
-
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = '×';
-        closeBtn.style.cssText = `
-          background: none;
-          border: none;
-          color: #fff;
-          font-size: 28px;
-          cursor: pointer;
-          padding: 0;
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        `;
-        closeBtn.addEventListener('click', () => document.body.removeChild(overlay));
-
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-
-        // Content
-        const content = document.createElement('div');
-        content.style.cssText = 'padding: 20px;';
-
-        // Show rendered and raw content with toggle
-        const renderedDiv = document.createElement('div');
-        renderedDiv.className = 'message-content';
-        renderedDiv.innerHTML = renderMarkdown(tab.text);
-        renderedDiv.style.display = 'block';
-
-        const rawDiv = document.createElement('div');
-        rawDiv.style.cssText = `
-          font-family: monospace;
-          white-space: pre-wrap;
-          background: #2a2a2a;
-          padding: 12px;
-          border-radius: 4px;
-          font-size: 12px;
-          display: none;
-        `;
-        rawDiv.textContent = tab.text;
-
-        // Controls
-        const controlsDiv = document.createElement('div');
-        controlsDiv.style.cssText = `
-          margin-bottom: 16px;
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        `;
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'copy-btn';
-        copyBtn.textContent = 'Copy';
-        copyBtn.style.cssText = 'padding: 6px 12px; font-size: 12px;';
-        copyBtn.addEventListener('click', () => copyToClipboard(tab.text, copyBtn));
-
-        const toggleLabel = document.createElement('label');
-        toggleLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;';
-
-        const toggleCheckbox = document.createElement('input');
-        toggleCheckbox.type = 'checkbox';
-        toggleCheckbox.checked = false;
-        toggleCheckbox.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            renderedDiv.style.display = 'none';
-            rawDiv.style.display = 'block';
-          } else {
-            renderedDiv.style.display = 'block';
-            rawDiv.style.display = 'none';
-          }
-        });
-
-        toggleLabel.appendChild(toggleCheckbox);
-        toggleLabel.appendChild(document.createTextNode('Show raw text'));
-
-        controlsDiv.appendChild(copyBtn);
-        controlsDiv.appendChild(toggleLabel);
-
-        content.appendChild(controlsDiv);
-        content.appendChild(renderedDiv);
-        content.appendChild(rawDiv);
-
-        // Add stats if available
-        if (tab.stats) {
-          const statsEl = document.createElement('div');
-          statsEl.style.cssText = `
-            margin-top: 16px;
-            padding: 12px;
-            background: #2a2a2a;
-            border-radius: 4px;
-            font-size: 11px;
-            color: #aaa;
-          `;
-
-          const statItems = [];
-
-          if (tab.stats.latencyMs !== undefined) {
-            statItems.push(`Latency: ${(tab.stats.latencyMs / 1000).toFixed(2)}s`);
-          }
-
-          if (tab.stats.usage) {
-            const usage = tab.stats.usage;
-            if (usage.input_tokens !== undefined && usage.output_tokens !== undefined) {
-              statItems.push(`Tokens: ${usage.input_tokens} in / ${usage.output_tokens} out (${usage.input_tokens + usage.output_tokens} total)`);
-            } else if (usage.prompt_tokens !== undefined && usage.completion_tokens !== undefined) {
-              statItems.push(`Tokens: ${usage.prompt_tokens} in / ${usage.completion_tokens} out (${usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens)} total)`);
-            }
-          }
-
-          if (tab.stats.model) {
-            statItems.push(`Model: ${tab.stats.model}`);
-          }
-
-          statsEl.innerHTML = statItems.join(' • ');
-          content.appendChild(statsEl);
+        if (stats.model) {
+          statItems.push(`🤖 ${stats.model}`);
         }
 
-        modal.appendChild(header);
-        modal.appendChild(content);
-        overlay.appendChild(modal);
+        statsEl.textContent = statItems.join(' • ');
+        messageEl.appendChild(statsEl);
 
-        // Close on overlay click
-        overlay.addEventListener('click', (e) => {
-          if (e.target === overlay) {
-            document.body.removeChild(overlay);
-          }
+        // Click to switch to conversation tab
+        messageEl.addEventListener('click', () => {
+          switchTab(tabId);
         });
 
-        // Close on Escape key
-        const escapeHandler = (e) => {
-          if (e.key === 'Escape') {
-            document.body.removeChild(overlay);
-            document.removeEventListener('keydown', escapeHandler);
-          }
-        };
-        document.addEventListener('keydown', escapeHandler);
-
-        document.body.appendChild(overlay);
-
-        // Update tab view time
-        state.tabLastViewTime.set(tabId, Date.now());
-        state.activeTabId = tabId;
-        renderTabs();
+        containerEl.appendChild(messageEl);
+        chatContainer.appendChild(containerEl);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
       }
 
       /**
@@ -1357,18 +1271,37 @@
         try {
           setLoading(true);
           updateStatus(`Analyzing content with ${provider}...`);
-          addMessage(query, 'user');
+
+          // Store user message temporarily
+          state.pendingConversation = {
+            userMessage: query,
+            estimatedTokens: estimateTokenCount(query),
+            timestamp: Date.now()
+          };
 
           const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
 
           if (result.success) {
-            // Display response with stats
-            addMessage(result.response, 'assistant', {
+            // Create conversation tab with both messages
+            const stats = {
               latencyMs: result.latencyMs,
               usage: result.usage,
               tokensUsed: result.tokensUsed,
               model: result.model
-            });
+            };
+
+            const tabId = createConversationTab(query, result.response, stats);
+
+            // Add conversation summary to chat container (metadata only)
+            const tab = state.activeTabs.get(tabId);
+            addConversationToChat(
+              tabId,
+              tab.id,
+              tab.userTokens,
+              tab.assistantTokens,
+              stats
+            );
+
             updateStatus(
               `Response generated using ${result.provider}`,
               'success'
@@ -1376,12 +1309,14 @@
           } else {
             updateStatus(`Error: ${result.error}`, 'error');
             addMessage(`❌ ${result.error}`, 'error');
+            state.pendingConversation = null; // Clear pending on error
           }
 
           queryInput.value = '';
         } catch (error) {
           updateStatus(`Error: ${error.message}`, 'error');
           addMessage(`❌ ${error.message}`, 'error');
+          state.pendingConversation = null; // Clear pending on error
         } finally {
           setLoading(false);
         }
@@ -1398,8 +1333,8 @@
             return;
           }
 
-          // Handle message tabs (no need to call Electron API)
-          if (tab.type === 'message') {
+          // Handle conversation tabs (no need to call Electron API)
+          if (tab.type === 'conversation') {
             state.activeTabs.delete(tabId);
             state.selectedTabs.delete(tabId);
             state.tabLastViewTime.delete(tabId);
@@ -1441,9 +1376,22 @@
           return;
         }
 
-        // Handle message tabs differently
-        if (tab.type === 'message') {
-          switchToMessageTab(tabId);
+        // Handle conversation tabs - open HTML content in browser
+        if (tab.type === 'conversation') {
+          try {
+            // Create a data URL from the HTML content
+            const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(tab.htmlContent);
+
+            // Open it as a new browser tab
+            await window.electronAPI.openTab(dataUrl);
+
+            // Track last view time for sorting
+            state.tabLastViewTime.set(tabId, Date.now());
+            updateStatus('Conversation opened in browser', 'success');
+          } catch (error) {
+            console.error('Error opening conversation:', error);
+            updateStatus(`Error opening conversation: ${error.message}`, 'error');
+          }
           return;
         }
 
@@ -1768,21 +1716,21 @@
 
         const isSelected = state.selectedTabs.has(tabId);
         const isCurrent = state.activeTabId === tabId;
-        const isMessageTab = tab.type === 'message';
+        const isConversationTab = tab.type === 'conversation';
         const tabEl = document.createElement('div');
 
         // Add classes for visual states
         const classes = ['tab-item'];
         if (isSelected) classes.push('active');
         if (isCurrent) classes.push('current');
-        if (isMessageTab) classes.push('message-tab');
+        if (isConversationTab) classes.push('conversation-tab');
         tabEl.className = classes.join(' ');
         tabEl.draggable = true;
         tabEl.dataset.tabId = tabId;
 
-        // Add visual indicator for message tabs
-        if (isMessageTab) {
-          tabEl.style.borderLeft = '3px solid #4a9eff';
+        // Add visual indicator for conversation tabs
+        if (isConversationTab) {
+          tabEl.style.borderLeft = '3px solid #a371f7';
         }
 
         // Create checkbox
@@ -1800,17 +1748,17 @@
         // Create title span
         const title = tab.title || 'Untitled';
         const currentIndicator = isCurrent ? '👁 ' : '';
-        const messageIndicator = isMessageTab ? '💬 ' : '';
+        const conversationIndicator = isConversationTab ? '💬 ' : '';
         const titleSpan = document.createElement('span');
         titleSpan.className = 'tab-title';
-        titleSpan.textContent = `${currentIndicator}${messageIndicator}${title}`;
-        titleSpan.style.fontSize = isMessageTab ? '11px' : '12px';
+        titleSpan.textContent = `${currentIndicator}${conversationIndicator}${title}`;
+        titleSpan.style.fontSize = isConversationTab ? '11px' : '12px';
 
         // Create clickable div for tab switching
         const clickableDiv = document.createElement('div');
         clickableDiv.className = 'clickable-area';
         clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px;';
-        clickableDiv.title = isMessageTab ? 'Click to view message' : (isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab');
+        clickableDiv.title = isConversationTab ? 'Click to view conversation in browser' : (isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab');
         clickableDiv.draggable = false; // Prevent drag interference
         clickableDiv.appendChild(checkbox);
         clickableDiv.appendChild(titleSpan);
