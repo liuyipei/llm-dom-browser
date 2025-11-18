@@ -241,8 +241,8 @@ function setupLinkClickHandler() {
   try {
     console.log('[LLM Browser] Setting up link click handler');
 
-    // Capture phase to intercept before site handlers
-    document.addEventListener('click', (event) => {
+    // Use mousedown event which fires earlier and is easier to prevent
+    document.addEventListener('mousedown', (event) => {
       try {
         // Find the closest anchor tag
         let target = event.target;
@@ -292,8 +292,53 @@ function setupLinkClickHandler() {
 
           console.log(`[LLM Browser] Opening link in new ${openInForeground ? 'foreground' : 'background'} tab:`, href);
           console.log(`[LLM Browser] Modifier keys - Ctrl/Cmd: ${ctrlOrCmd}, Shift: ${shift}, Button: ${event.button}`);
+
+          return false;
         }
         // Normal click without modifiers: let it navigate normally
+      } catch (innerError) {
+        console.error('[LLM Browser] Error in mousedown handler:', innerError);
+      }
+    }, true); // Use capture phase
+
+    // Also prevent the click event to be extra safe
+    document.addEventListener('click', (event) => {
+      try {
+        // Find the closest anchor tag
+        let target = event.target;
+        let depth = 0;
+        while (target && target.tagName !== 'A' && depth < 10) {
+          target = target.parentElement;
+          depth++;
+        }
+
+        // Not a link, let it through
+        if (!target || target.tagName !== 'A') {
+          return;
+        }
+
+        const href = target.href;
+
+        // Ignore empty hrefs, javascript:, mailto:, tel:, etc.
+        if (!href ||
+            href.startsWith('javascript:') ||
+            href.startsWith('mailto:') ||
+            href.startsWith('tel:') ||
+            href.startsWith('#')) {
+          return;
+        }
+
+        // Check for modifier keys
+        const ctrlOrCmd = event.ctrlKey || event.metaKey;
+        const middleClick = event.button === 1;
+
+        // If ctrl or middle-click, prevent the click event too
+        if (ctrlOrCmd || middleClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          return false;
+        }
       } catch (innerError) {
         console.error('[LLM Browser] Error in click handler:', innerError);
       }
