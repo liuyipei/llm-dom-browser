@@ -1540,6 +1540,7 @@
         checkbox.checked = isSelected;
         checkbox.style.cursor = 'pointer';
         checkbox.title = isSelected ? 'Remove from LLM query' : 'Include in LLM query';
+        checkbox.draggable = false; // Prevent drag interference
         checkbox.addEventListener('click', (e) => {
           e.stopPropagation();
           toggleTabSelection(tabId);
@@ -1550,6 +1551,7 @@
         pinBtn.className = 'pin-btn' + (isPinned ? ' pinned' : '');
         pinBtn.innerHTML = isPinned ? '📌' : '📍';
         pinBtn.title = isPinned ? 'Unpin tab' : 'Pin tab';
+        pinBtn.draggable = false; // Prevent drag interference
         pinBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           togglePinTab(tabId);
@@ -1586,6 +1588,7 @@
         groupBtn.className = 'button-small';
         groupBtn.title = 'Add to group';
         groupBtn.style.cssText = 'padding: 2px 6px; font-size: 12px;';
+        groupBtn.draggable = false; // Prevent drag interference
         groupBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           promptAddToGroup(tabId);
@@ -1595,7 +1598,11 @@
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
         closeBtn.className = 'button-small';
-        closeBtn.addEventListener('click', () => closeTab(tabId));
+        closeBtn.draggable = false; // Prevent drag interference
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeTab(tabId);
+        });
 
         buttonsDiv.appendChild(groupBtn);
         buttonsDiv.appendChild(closeBtn);

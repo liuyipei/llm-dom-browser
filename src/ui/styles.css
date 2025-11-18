@@ -306,7 +306,7 @@ body {
 }
 
 /* Pin button */
-.pin-btn {
+.tab-item .pin-btn {
   background: transparent;
   border: none;
   cursor: pointer;
@@ -316,11 +316,11 @@ body {
   transition: opacity 0.2s ease;
 }
 
-.pin-btn:hover {
+.tab-item .pin-btn:hover {
   opacity: 1;
 }
 
-.pin-btn.pinned {
+.tab-item .pin-btn.pinned {
   opacity: 1;
   color: #4caf50;
 }
