@@ -1,14 +1,8 @@
 // Mock all providers
-jest.mock('../../src/providers/openai-provider', () => jest.fn());
 jest.mock('../../src/providers/anthropic-provider', () => jest.fn());
 jest.mock('../../src/providers/gemini-provider', () => jest.fn());
-jest.mock('../../src/providers/xai-provider', () => jest.fn());
-jest.mock('../../src/providers/fireworks-provider', () => jest.fn());
 jest.mock('../../src/providers/openrouter-provider', () => jest.fn());
-jest.mock('../../src/providers/deepseek-provider', () => jest.fn());
-jest.mock('../../src/providers/kimi-provider', () => jest.fn());
 jest.mock('../../src/providers/minimax-provider', () => jest.fn());
-jest.mock('../../src/providers/glm-provider', () => jest.fn());
 
 const ProviderFactory = require('../../src/providers/provider-factory');
 const { PROVIDERS, DEFAULT_MODELS } = require('../../src/providers/models');
@@ -38,17 +32,18 @@ describe('🏭 Provider Factory Tests', () => {
     global.testLog('  ✓ XAI Grok provider created');
   });
 
-  test('✅ Create all 10 providers', () => {
+  test('✅ Create all 13 providers', () => {
     const providers = [
       'openai', 'anthropic', 'google', 'xai', 'openrouter',
-      'fireworks', 'deepseek', 'kimi', 'minimax', 'glm'
+      'fireworks', 'deepseek', 'kimi', 'minimax', 'glm',
+      'ollama', 'vllm', 'lmstudio'
     ];
     const created = providers.map(name => ({
       name,
-      instance: ProviderFactory.createProvider(name, { apiKey: 'test' })
+      instance: ProviderFactory.createProvider(name, { apiKey: 'test', model: 'test-model' })
     }));
-    expect(created.length).toBe(10);
-    global.testLog(`  ✓ All 10 providers created: ${providers.join(', ')}`);
+    expect(created.length).toBe(13);
+    global.testLog(`  ✓ All 13 providers created: ${providers.join(', ')}`);
   });
 
   test('✅ Invalid provider name (error handling)', () => {
@@ -68,9 +63,12 @@ describe('🏭 Provider Factory Tests', () => {
 
   test('✅ Get supported providers list', () => {
     const supported = ProviderFactory.getSupportedProviders();
-    expect(supported.length).toBe(10);
+    expect(supported.length).toBe(13);
     expect(supported).toContain('openai');
     expect(supported).toContain('anthropic');
+    expect(supported).toContain('ollama');
+    expect(supported).toContain('vllm');
+    expect(supported).toContain('lmstudio');
     global.testLog(`  ✓ ${supported.length} providers supported`);
   });
 
@@ -81,8 +79,8 @@ describe('🏭 Provider Factory Tests', () => {
   });
 
   test('✅ Case insensitive provider lookup', () => {
-    const provider1 = ProviderFactory.createProvider('OPENAI', { apiKey: 'test' });
-    const provider2 = ProviderFactory.createProvider('openai', { apiKey: 'test' });
+    const provider1 = ProviderFactory.createProvider('OPENAI', { apiKey: 'test', model: 'gpt-4' });
+    const provider2 = ProviderFactory.createProvider('openai', { apiKey: 'test', model: 'gpt-4' });
     expect(provider1).toBeDefined();
     expect(provider2).toBeDefined();
     global.testLog('  ✓ Case-insensitive provider lookup works');
