@@ -19,11 +19,12 @@ const storage = {
         apiKeys: {},
         selectedModels: {},
         fetchedModels: {},
-        endpoints: {}
+        endpoints: {},
+        lastSelectedProvider: null
       };
     } catch (error) {
       console.error('Error loading settings:', error);
-      return { apiKeys: {}, selectedModels: {}, fetchedModels: {}, endpoints: {} };
+      return { apiKeys: {}, selectedModels: {}, fetchedModels: {}, endpoints: {}, lastSelectedProvider: null };
     }
   },
 
@@ -94,6 +95,18 @@ const storage = {
     data.fireworksDeployment = deploymentId;
     this.save(data);
     console.log(`Saved Fireworks deployment ID: ${deploymentId}`);
+  },
+
+  getLastSelectedProvider() {
+    const data = this.load();
+    return data.lastSelectedProvider || null;
+  },
+
+  saveLastSelectedProvider(provider) {
+    const data = this.load();
+    data.lastSelectedProvider = provider;
+    this.save(data);
+    console.log(`Saved last selected provider: ${provider}`);
   }
 };
 
