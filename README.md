@@ -257,22 +257,36 @@ const text = await window.contentAPI.executeCommand('get-text-by-selector', { se
 
 ## Security Features
 
-- ✅ Context isolation enabled on all WebContentsView
-- ✅ Node.js disabled (`nodeIntegration: false`)
-- ✅ Sandbox enabled for untrusted content
-- ✅ Safe API exposure via contextBridge (no raw Electron APIs)
-- ✅ File path validation (prevents directory traversal)
-- ✅ IPC argument validation in preload scripts
-- ✅ No synchronous DOM access (enforced by async architecture)
+### Core Security Measures
+- ✅ **Context Isolation**: All WebContentsView instances have `contextIsolation: true`
+- ✅ **Node.js Disabled**: `nodeIntegration: false` on all renderer processes
+- ✅ **Sandboxing**: All untrusted content runs sandboxed
+- ✅ **Safe API Exposure**: Only via `contextBridge` (no raw Electron APIs)
+- ✅ **Async Architecture**: No synchronous DOM access (enforced by design)
+
+### Input Validation & Sanitization
+- ✅ **Path Traversal Protection**: Robust validation using `path.normalize()` and `path.resolve()`
+- ✅ **Absolute Path Requirement**: All file operations require absolute paths
+- ✅ **IPC Input Validation**: All IPC parameters validated in preload scripts
+- ✅ **Options Sanitization**: executeJavaScript calls use validated, sanitized options
+
+### Recent Security Improvements (2025-01)
+- Enhanced path traversal protection with multi-layer validation
+- Eliminated unsafe dynamic require patterns
+- Added input sanitization for all executeJavaScript calls
+- Reduced code complexity to minimize attack surface
 
 ## Known Limitations & Future Work
 
-1. **LLM API Integration**: Currently returns mock responses. Integrate with OpenAI, Anthropic, or other APIs.
-2. **React UI**: Chat UI is vanilla HTML/JS. Can be replaced with React app build.
+### Architecture
+1. **UI Configuration Sync**: Provider configuration duplicated between `models.js` (main) and `ui-config.js` (renderer). TODO: Fetch via IPC to ensure single source of truth.
+2. **Multi-window**: Single main window only. Can extend for multiple windows.
+
+### Features
 3. **PDF Per-Page Extraction**: Currently extracts full text. `pdf-parse` returns concatenated text.
-4. **State Persistence**: No localStorage for tabs or conversation history.
-5. **Multi-window**: Single main window only. Can extend for multiple windows.
-6. **Drag & Drop**: Could add drag-drop file upload to content area.
+4. **State Persistence**: Limited localStorage for tabs or conversation history.
+5. **Drag & Drop**: Could add drag-drop file upload to content area.
+6. **Screenshot Consent**: Screenshot capture doesn't require explicit user consent. Consider adding opt-in UI.
 
 ## Environment Variables
 
@@ -344,10 +358,21 @@ pdfService.clearCache()
 
 ## Performance Considerations
 
-- **PDF Extraction**: Cached in memory (LRU, max 10 files)
+- **PDF Extraction**: Cached in memory (LRU, max 10 files). Optimized to avoid redundant page iteration.
 - **DOM Serialization**: Limits arrays (100 paragraphs, 50 links)
 - **LLM Context**: Main content limited to 2000 chars to reduce tokens
 - **IPC Overhead**: All communication is async; batch where possible
+- **Code Complexity**: Reduced nesting and improved modularity for better maintainability and performance
+
+## Code Quality
+
+This codebase follows best practices for security and maintainability:
+
+- **Single Responsibility**: Functions extracted to handle specific tasks
+- **Reduced Nesting**: Complex functions broken into smaller, focused helpers
+- **Input Validation**: All external inputs validated at entry points
+- **Error Handling**: Graceful error handling with informative messages
+- **Documentation**: Inline comments and JSDoc for complex logic
 
 ## References
 

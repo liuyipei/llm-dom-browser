@@ -93,8 +93,12 @@ class IPCHandlers {
         } else {
           // HTML: Serialize DOM via preload script
           try {
+            // Validate options to prevent injection
+            const safeOptions = {
+              includeMedia: Boolean(options?.includeMedia)
+            };
             const domData = await view.webContents.executeJavaScript(
-              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(options)}) : null`
+              `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(safeOptions)}) : null`
             );
             return {
               type: 'html',
@@ -152,8 +156,7 @@ class IPCHandlers {
     // Handle IPC: Fetch models dynamically for a provider
     ipcMain.handle('fetch-provider-models', async (event, { provider, apiKey }) => {
       try {
-        const ModelDiscovery = require('./services/llm-orchestrator').ModelDiscovery ||
-                              require('./providers/model-discovery');
+        const ModelDiscovery = require('./providers/model-discovery');
         const models = await ModelDiscovery.getRecommendedModels(provider, apiKey);
         return { success: true, models };
       } catch (error) {

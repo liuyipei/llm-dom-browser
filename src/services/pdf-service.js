@@ -48,14 +48,8 @@ class PDFService {
       // Extract text using pdf-parse
       const data = await pdfParse(pdfBuffer);
 
-      // Combine text from all pages
-      let fullText = '';
-      for (let i = 0; i < data.numpages; i++) {
-        fullText += data.version ? data.text : ''; // pdf-parse concatenates text
-      }
-
-      // Clean up text
-      const cleanedText = this._cleanText(fullText);
+      // pdf-parse already concatenates all pages into data.text
+      const cleanedText = this._cleanText(data.text || '');
 
       // Store in cache with size management
       this._addToCache(filePath, cleanedText);
@@ -171,9 +165,21 @@ class PDFService {
    * Validate file path to prevent directory traversal
    */
   _isValidPath(filePath) {
-    if (typeof filePath !== 'string') return false;
-    if (filePath.includes('..')) return false; // Prevent directory traversal
-    if (!path.isAbsolute(filePath)) return false; // Require absolute paths
+    if (typeof filePath !== 'string' || filePath.length === 0) {
+      return false;
+    }
+
+    if (!path.isAbsolute(filePath)) {
+      return false;
+    }
+
+    const normalized = path.normalize(filePath);
+    const resolved = path.resolve(filePath);
+
+    if (normalized !== resolved || filePath.includes('..') || normalized.includes('..')) {
+      return false;
+    }
+
     return true;
   }
 
