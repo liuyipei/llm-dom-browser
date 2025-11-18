@@ -74,9 +74,14 @@ body {
   border-color: #3498db;
 }
 
-.chat-container {
+.main-content-wrapper {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-container {
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -156,8 +161,6 @@ body {
   border-top: 1px solid #ddd;
   padding: 12px;
   background: #fafafa;
-  max-height: 150px;
-  overflow-y: auto;
   transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
 }
 
@@ -312,8 +315,6 @@ body {
   flex-direction: column;
   gap: 8px;
   transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
-  max-height: 500px;
-  overflow-y: auto;
 }
 
 .input-section.collapsed {
@@ -589,8 +590,6 @@ button:disabled {
   border-top: 1px solid #ddd;
   padding: 12px;
   background: #fafafa;
-  max-height: 200px;
-  overflow-y: auto;
   transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
 }
 

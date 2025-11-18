@@ -26,35 +26,36 @@
       </div>
     </div>
 
-    <div class="chat-container" id="chatContainer">
-      <div class="message system">
-        Welcome to LLM-DOM Browser. Open tabs and ask questions about their content!
+    <div class="main-content-wrapper">
+      <div class="chat-container" id="chatContainer">
+        <div class="message system">
+          Welcome to LLM-DOM Browser. Open tabs and ask questions about their content!
+        </div>
       </div>
-    </div>
 
-    <div class="tabs-section">
-      <h3>📑 Open Tabs</h3>
-      <div class="tabs-sort-buttons">
-        <button id="sortByUrlBtn" class="sort-btn button-small" title="Sort tabs by URL">Sort by URL</button>
-        <button id="sortByTimeBtn" class="sort-btn button-small" title="Sort tabs by most recent view">Sort by Time</button>
-        <button id="sortManualBtn" class="sort-btn button-small active" title="Manual order (drag to reorder)">Manual Order</button>
+      <div class="tabs-section">
+        <h3>📑 Open Tabs</h3>
+        <div class="tabs-sort-buttons">
+          <button id="sortByUrlBtn" class="sort-btn button-small" title="Sort tabs by URL">Sort by URL</button>
+          <button id="sortByTimeBtn" class="sort-btn button-small" title="Sort tabs by most recent view">Sort by Time</button>
+          <button id="sortManualBtn" class="sort-btn button-small active" title="Manual order (drag to reorder)">Manual Order</button>
+        </div>
+        <div class="help-text">Click tab to view, checkbox to select for LLM</div>
+        <div class="tab-list" id="tabList"></div>
       </div>
-      <div class="help-text">Click tab to view, checkbox to select for LLM</div>
-      <div class="tab-list" id="tabList"></div>
-    </div>
 
-    <div class="bookmarks-section">
-      <h3>
-        <span>⭐ Bookmarks</span>
-        <button id="bookmarkBtn" class="bookmark-btn button-small" title="Bookmark current tab">★</button>
-      </h3>
-      <div class="bookmark-search">
-        <input type="text" id="bookmarkSearchInput" placeholder="Search bookmarks..." />
+      <div class="bookmarks-section">
+        <h3>
+          <span>⭐ Bookmarks</span>
+          <button id="bookmarkBtn" class="bookmark-btn button-small" title="Bookmark current tab">★</button>
+        </h3>
+        <div class="bookmark-search">
+          <input type="text" id="bookmarkSearchInput" placeholder="Search bookmarks..." />
+        </div>
+        <div class="bookmark-list" id="bookmarkList"></div>
       </div>
-      <div class="bookmark-list" id="bookmarkList"></div>
-    </div>
 
-    <div class="input-section">
+      <div class="input-section">
       <div class="input-row">
         <input type="text" id="urlInput" placeholder="Enter URL or file path..." />
         <button id="openBtn" class="button-small">🔗 Open</button>
@@ -120,6 +121,7 @@
 
       <div class="status" id="status"></div>
     </div>
+    </div>
 
     <!-- Modular JavaScript (extracted to separate files) -->
     <script src="ui-config.js"></script>
@@ -145,6 +147,7 @@
       };
 
       // DOM Elements
+      const mainContentWrapper = document.querySelector('.main-content-wrapper');
       const chatContainer = document.getElementById('chatContainer');
       const tabList = document.getElementById('tabList');
       const urlInput = document.getElementById('urlInput');
@@ -1131,7 +1134,7 @@
 
         containerEl.appendChild(messageEl);
         chatContainer.appendChild(containerEl);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        mainContentWrapper.scrollTop = mainContentWrapper.scrollHeight;
       }
 
       /**
@@ -1186,7 +1189,7 @@
 
         containerEl.appendChild(messageEl);
         chatContainer.appendChild(containerEl);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        mainContentWrapper.scrollTop = mainContentWrapper.scrollHeight;
       }
 
       /**
