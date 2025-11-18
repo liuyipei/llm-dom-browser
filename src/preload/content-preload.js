@@ -239,93 +239,110 @@ if (document.readyState === 'loading') {
  */
 function setupLinkClickHandler() {
   try {
+    console.log('[LLM Browser] Setting up link click handler');
+
     // Capture phase to intercept before site handlers
     document.addEventListener('click', (event) => {
-      // Find the closest anchor tag
-      let target = event.target;
-      while (target && target.tagName !== 'A') {
-        target = target.parentElement;
+      try {
+        // Find the closest anchor tag
+        let target = event.target;
+        let depth = 0;
+        while (target && target.tagName !== 'A' && depth < 10) {
+          target = target.parentElement;
+          depth++;
+        }
+
+        // Not a link, let it through
+        if (!target || target.tagName !== 'A') {
+          return;
+        }
+
+        const href = target.href;
+
+        // Ignore empty hrefs, javascript:, mailto:, tel:, etc.
+        if (!href ||
+            href.startsWith('javascript:') ||
+            href.startsWith('mailto:') ||
+            href.startsWith('tel:') ||
+            href.startsWith('#')) {
+          return;
+        }
+
+        // Check for modifier keys
+        const ctrlOrCmd = event.ctrlKey || event.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
+        const shift = event.shiftKey;
+        const middleClick = event.button === 1;
+
+        // Chrome-like behavior:
+        // 1. Ctrl+Click or Cmd+Click: Open in new background tab
+        // 2. Ctrl+Shift+Click or Cmd+Shift+Click: Open in new foreground tab
+        // 3. Middle-click: Open in new background tab
+        if (ctrlOrCmd || middleClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+
+          const openInForeground = ctrlOrCmd && shift;
+
+          // Send IPC to main process to open in new tab
+          ipcRenderer.send('open-link-in-new-tab', {
+            url: href,
+            foreground: openInForeground
+          });
+
+          console.log(`[LLM Browser] Opening link in new ${openInForeground ? 'foreground' : 'background'} tab:`, href);
+          console.log(`[LLM Browser] Modifier keys - Ctrl/Cmd: ${ctrlOrCmd}, Shift: ${shift}, Button: ${event.button}`);
+        }
+        // Normal click without modifiers: let it navigate normally
+      } catch (innerError) {
+        console.error('[LLM Browser] Error in click handler:', innerError);
       }
-
-      // Not a link, let it through
-      if (!target || target.tagName !== 'A') {
-        return;
-      }
-
-      const href = target.href;
-
-      // Ignore empty hrefs, javascript:, mailto:, tel:, etc.
-      if (!href ||
-          href.startsWith('javascript:') ||
-          href.startsWith('mailto:') ||
-          href.startsWith('tel:') ||
-          href.startsWith('#')) {
-        return;
-      }
-
-      // Check for modifier keys
-      const ctrlOrCmd = event.ctrlKey || event.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
-      const shift = event.shiftKey;
-      const middleClick = event.button === 1;
-
-      // Chrome-like behavior:
-      // 1. Ctrl+Click or Cmd+Click: Open in new background tab
-      // 2. Ctrl+Shift+Click or Cmd+Shift+Click: Open in new foreground tab
-      // 3. Middle-click: Open in new background tab
-      if (ctrlOrCmd || middleClick) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const openInForeground = ctrlOrCmd && shift;
-
-        // Send IPC to main process to open in new tab
-        ipcRenderer.send('open-link-in-new-tab', {
-          url: href,
-          foreground: openInForeground
-        });
-
-        console.log(`[LLM Browser] Opening link in new ${openInForeground ? 'foreground' : 'background'} tab:`, href);
-      }
-      // Normal click without modifiers: let it navigate normally
     }, true); // Use capture phase
 
     // Also handle middle-click (auxclick event)
     document.addEventListener('auxclick', (event) => {
-      // Middle-click is button 1
-      if (event.button !== 1) {
-        return;
+      try {
+        // Middle-click is button 1
+        if (event.button !== 1) {
+          return;
+        }
+
+        // Find the closest anchor tag
+        let target = event.target;
+        let depth = 0;
+        while (target && target.tagName !== 'A' && depth < 10) {
+          target = target.parentElement;
+          depth++;
+        }
+
+        if (!target || target.tagName !== 'A') {
+          return;
+        }
+
+        const href = target.href;
+
+        if (!href ||
+            href.startsWith('javascript:') ||
+            href.startsWith('mailto:') ||
+            href.startsWith('tel:') ||
+            href.startsWith('#')) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        // Middle-click opens in background tab (Chrome behavior)
+        ipcRenderer.send('open-link-in-new-tab', {
+          url: href,
+          foreground: false
+        });
+
+        console.log('[LLM Browser] Middle-click: Opening link in new background tab:', href);
+      } catch (innerError) {
+        console.error('[LLM Browser] Error in auxclick handler:', innerError);
       }
-
-      // Find the closest anchor tag
-      let target = event.target;
-      while (target && target.tagName !== 'A') {
-        target = target.parentElement;
-      }
-
-      if (!target || target.tagName !== 'A') {
-        return;
-      }
-
-      const href = target.href;
-
-      if (!href ||
-          href.startsWith('javascript:') ||
-          href.startsWith('mailto:') ||
-          href.startsWith('tel:') ||
-          href.startsWith('#')) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Middle-click opens in background tab (Chrome behavior)
-      ipcRenderer.send('open-link-in-new-tab', {
-        url: href,
-        foreground: false
-      });
-
-      console.log('[LLM Browser] Middle-click: Opening link in new background tab:', href);
     }, true);
 
     console.log('[LLM Browser] Link click handler initialized');
