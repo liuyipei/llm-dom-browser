@@ -12,6 +12,8 @@ class TabManager {
     this.contentViews = options.contentViews || new Map();
     this.activeTabId = null;
     this.updateViewBounds = options.updateViewBounds;
+    this.closedTabs = []; // Track recently closed tabs for reopen functionality
+    this.maxClosedTabs = 10; // Limit history size
   }
 
   /**
@@ -136,6 +138,16 @@ class TabManager {
 
       const view = this.contentViews.get(targetTabId);
       if (view) {
+        // Store tab info for reopen functionality
+        const url = view.webContents.getURL();
+        const title = view.webContents.getTitle();
+        this.closedTabs.push({ url, title, timestamp: Date.now() });
+
+        // Limit history size
+        if (this.closedTabs.length > this.maxClosedTabs) {
+          this.closedTabs.shift();
+        }
+
         this.mainWindow.contentView.removeChildView(view);
         view.webContents.destroy();
         this.contentViews.delete(targetTabId);
@@ -206,6 +218,151 @@ class TabManager {
    */
   getAllTabs() {
     return Array.from(this.contentViews.keys());
+  }
+
+  /**
+   * Navigate to the next tab
+   */
+  nextTab() {
+    const tabs = this.getAllTabs();
+    if (tabs.length <= 1) {
+      return { success: false, error: 'Not enough tabs' };
+    }
+
+    const currentIndex = tabs.indexOf(this.activeTabId);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    const nextTabId = tabs[nextIndex];
+
+    return this.switchTab(nextTabId);
+  }
+
+  /**
+   * Navigate to the previous tab
+   */
+  previousTab() {
+    const tabs = this.getAllTabs();
+    if (tabs.length <= 1) {
+      return { success: false, error: 'Not enough tabs' };
+    }
+
+    const currentIndex = tabs.indexOf(this.activeTabId);
+    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    const prevTabId = tabs[prevIndex];
+
+    return this.switchTab(prevTabId);
+  }
+
+  /**
+   * Jump to a specific tab by index (1-based)
+   */
+  jumpToTab(index) {
+    const tabs = this.getAllTabs();
+
+    // Convert 1-based to 0-based index
+    const arrayIndex = index - 1;
+
+    if (arrayIndex < 0 || arrayIndex >= tabs.length) {
+      return { success: false, error: 'Tab index out of range' };
+    }
+
+    const tabId = tabs[arrayIndex];
+    return this.switchTab(tabId);
+  }
+
+  /**
+   * Reopen the last closed tab
+   */
+  async reopenLastClosedTab() {
+    if (this.closedTabs.length === 0) {
+      return { success: false, error: 'No closed tabs to reopen' };
+    }
+
+    const lastClosed = this.closedTabs.pop();
+    try {
+      const result = await this.openTab(lastClosed.url);
+      console.log(`Reopened tab: ${lastClosed.url}`);
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('Error reopening tab:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Navigate back in the active tab's history
+   */
+  goBack() {
+    if (!this.activeTabId) {
+      return { success: false, error: 'No active tab' };
+    }
+
+    const view = this.contentViews.get(this.activeTabId);
+    if (view && view.webContents && view.webContents.canGoBack()) {
+      view.webContents.goBack();
+      console.log(`Navigated back in tab ${this.activeTabId}`);
+      return { success: true };
+    }
+
+    return { success: false, error: 'Cannot go back' };
+  }
+
+  /**
+   * Navigate forward in the active tab's history
+   */
+  goForward() {
+    if (!this.activeTabId) {
+      return { success: false, error: 'No active tab' };
+    }
+
+    const view = this.contentViews.get(this.activeTabId);
+    if (view && view.webContents && view.webContents.canGoForward()) {
+      view.webContents.goForward();
+      console.log(`Navigated forward in tab ${this.activeTabId}`);
+      return { success: true };
+    }
+
+    return { success: false, error: 'Cannot go forward' };
+  }
+
+  /**
+   * Stop loading the active tab
+   */
+  stopLoading() {
+    if (!this.activeTabId) {
+      return { success: false, error: 'No active tab' };
+    }
+
+    const view = this.contentViews.get(this.activeTabId);
+    if (view && view.webContents) {
+      view.webContents.stop();
+      console.log(`Stopped loading tab ${this.activeTabId}`);
+      return { success: true };
+    }
+
+    return { success: false, error: 'No active tab found' };
+  }
+
+  /**
+   * Reload the active tab (with optional cache bypass)
+   */
+  reloadTab(ignoreCached = false) {
+    if (!this.activeTabId) {
+      return { success: false, error: 'No active tab' };
+    }
+
+    const view = this.contentViews.get(this.activeTabId);
+    if (view && view.webContents) {
+      if (ignoreCached) {
+        view.webContents.reloadIgnoringCache();
+        console.log(`Hard reloaded tab ${this.activeTabId}`);
+      } else {
+        view.webContents.reload();
+        console.log(`Reloaded tab ${this.activeTabId}`);
+      }
+      return { success: true };
+    }
+
+    return { success: false, error: 'No active tab found' };
   }
 
   /**

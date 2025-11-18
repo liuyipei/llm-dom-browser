@@ -72,15 +72,14 @@ class ModelDiscovery {
    * @returns {Array} - Filtered and sorted models
    */
   static _filterAndSortModels(models, provider) {
-    // Filter out deprecated, preview, and small models
+    // Filter out only unusable models (keep small models for cost-conscious users)
     let filtered = models.filter(model => {
       const name = (model.id || model.name || '').toLowerCase();
 
-      // Exclude patterns
+      // Exclude only truly unusable patterns
       const excludePatterns = [
-        'preview', 'beta', 'deprecated', 'legacy',
-        'mini', 'nano', 'tiny', 'small',
-        'test', 'experimental', 'alpha'
+        'deprecated', 'legacy',
+        'test', 'experimental'
       ];
 
       if (excludePatterns.some(pattern => name.includes(pattern))) {
@@ -141,8 +140,8 @@ class ModelDiscovery {
     // Sort by priority (highest first)
     filtered.sort((a, b) => (b._priority || 0) - (a._priority || 0));
 
-    // Limit to top 20 models
-    return filtered.slice(0, 20).map(model => ({
+    // Return all filtered models (no limit - search functionality will handle large lists)
+    return filtered.map(model => ({
       id: model.id || model.name,
       name: model.name || model.id,
       context_length: model.context_length || model.max_context_length,

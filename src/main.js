@@ -54,8 +54,7 @@ function createWindow() {
     mainWindow,
     chatView,
     contentViews,
-    getActiveTabId: () => tabManager.getActiveTabId(),
-    closeTab: () => tabManager.closeTab()
+    tabManager
   });
 
   ipcHandlers.updateReferences({
