@@ -1248,6 +1248,16 @@
        * Drag and drop handlers
        */
       function handleDragStart(e) {
+        // Don't start drag if clicking on interactive elements
+        const target = e.target;
+        if (target.tagName === 'BUTTON' ||
+            target.tagName === 'INPUT' ||
+            target.closest('button') ||
+            target.closest('input')) {
+          e.preventDefault();
+          return;
+        }
+
         const tabId = e.currentTarget.dataset.tabId;
         state.draggedTabId = tabId;
         e.currentTarget.classList.add('dragging');
@@ -1553,7 +1563,9 @@
         pinBtn.title = isPinned ? 'Unpin tab' : 'Pin tab';
         pinBtn.draggable = false; // Prevent drag interference
         pinBtn.addEventListener('click', (e) => {
+          console.log('Pin button clicked for tab:', tabId);
           e.stopPropagation();
+          e.preventDefault();
           togglePinTab(tabId);
         });
 
@@ -1569,6 +1581,7 @@
         clickableDiv.className = 'clickable-area';
         clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px;';
         clickableDiv.title = isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab';
+        clickableDiv.draggable = false; // Prevent drag interference
         clickableDiv.appendChild(checkbox);
         clickableDiv.appendChild(pinBtn);
         clickableDiv.appendChild(titleSpan);
@@ -1581,6 +1594,7 @@
         // Create buttons container
         const buttonsDiv = document.createElement('div');
         buttonsDiv.style.cssText = 'display: flex; gap: 4px; align-items: center;';
+        buttonsDiv.draggable = false; // Prevent drag interference
 
         // Create group button
         const groupBtn = document.createElement('button');
@@ -1590,7 +1604,9 @@
         groupBtn.style.cssText = 'padding: 2px 6px; font-size: 12px;';
         groupBtn.draggable = false; // Prevent drag interference
         groupBtn.addEventListener('click', (e) => {
+          console.log('Group button clicked for tab:', tabId);
           e.stopPropagation();
+          e.preventDefault();
           promptAddToGroup(tabId);
         });
 
@@ -1600,7 +1616,9 @@
         closeBtn.className = 'button-small';
         closeBtn.draggable = false; // Prevent drag interference
         closeBtn.addEventListener('click', (e) => {
+          console.log('Close button clicked for tab:', tabId);
           e.stopPropagation();
+          e.preventDefault();
           closeTab(tabId);
         });
 
