@@ -70,6 +70,23 @@ class TabManager {
         this.updateViewBounds();
       }
 
+      // Handle Ctrl+Click, Cmd+Click, Shift+Click to open links in new tabs
+      contentView.webContents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
+        console.log(`[Tab Handler] Window open request - URL: ${url}, disposition: ${disposition}, features: ${features}`);
+
+        // disposition can be: 'foreground-tab', 'background-tab', 'new-window', etc.
+        // Ctrl/Cmd+Click creates 'background-tab', Shift+Click creates 'foreground-tab'
+        const shouldActivate = disposition === 'foreground-tab';
+
+        // Create a new tab without blocking
+        this.openTab(url, { activate: shouldActivate }).catch(error => {
+          console.error(`[Tab Handler] Failed to open new tab: ${error.message}`);
+        });
+
+        // Deny the request to prevent current tab navigation
+        return { action: 'deny' };
+      });
+
       // Listen for various load events to help debug loading issues
       contentView.webContents.on('did-start-loading', () => {
         console.log(`Tab ${tabId} started loading: ${url}`);
