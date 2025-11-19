@@ -57,6 +57,9 @@
           <button id="sortByTimeBtn" class="sort-btn button-small active" title="Sort tabs by most recent view (click to toggle direction)">Sort by Time ↓</button>
           <button id="sortManualBtn" class="sort-btn button-small" title="Manual order (drag to reorder)">Manual Order</button>
         </div>
+        <div style="margin: 8px 0;">
+          <button id="createNotesBtn" class="button-small" title="Create a new notes tab for editing text">📝 New Notes Tab</button>
+        </div>
         <div class="help-text">Click tab to view, checkbox to select for LLM</div>
         <div class="tab-list" id="tabList"></div>
       </div>
@@ -149,6 +152,7 @@
         sortDirection: 'desc', // Sort direction: 'asc' or 'desc' (default: desc - most recent/Z-A first)
         tabLastViewTime: new Map(), // Track last view time for each tab
         conversationCounter: 0, // Strictly increasing counter for conversation IDs
+        notesCounter: 0, // Strictly increasing counter for notes tab IDs
         pendingConversation: null // Temporarily stores user message until assistant responds
       };
 
@@ -188,6 +192,7 @@
       const sortByUrlBtn = document.getElementById('sortByUrlBtn');
       const sortByTimeBtn = document.getElementById('sortByTimeBtn');
       const sortManualBtn = document.getElementById('sortManualBtn');
+      const createNotesBtn = document.getElementById('createNotesBtn');
       const fireworksDeploymentRow = document.getElementById('fireworksDeploymentRow');
       const fireworksDeploymentInput = document.getElementById('fireworksDeploymentInput');
 
@@ -1172,6 +1177,127 @@
       }
 
       /**
+       * Create a new notes tab for editing text
+       * @param {string} initialContent - Initial content for the notes (optional)
+       * @returns {string} The created tab ID
+       */
+      function createNotesTab(initialContent = '') {
+        // Increment notes counter
+        state.notesCounter++;
+
+        // Create tab ID
+        const tabId = `notes_${state.notesCounter}`;
+
+        // Create tab title
+        const tabTitle = `Notes ${state.notesCounter}`;
+
+        // Generate HTML for the notes editor
+        const htmlContent = generateNotesHTML(state.notesCounter, initialContent);
+
+        // Store tab data
+        const tabData = {
+          type: 'notes',
+          id: state.notesCounter,
+          title: tabTitle,
+          htmlContent: htmlContent,
+          content: initialContent,
+          timestamp: Date.now()
+        };
+
+        state.activeTabs.set(tabId, tabData);
+        state.tabLastViewTime.set(tabId, Date.now());
+
+        // Add to tab order
+        state.tabOrder.push(tabId);
+
+        // Render tabs to show the new notes tab
+        renderTabs();
+
+        return tabId;
+      }
+
+      /**
+       * Generate HTML for notes editor
+       * @param {number} notesId - The notes ID
+       * @param {string} initialContent - Initial content for the notes
+       * @returns {string} HTML content
+       */
+      function generateNotesHTML(notesId, initialContent = '') {
+        return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes ${notesId}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #3498db;
+    }
+    h1 {
+      color: #3498db;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    .info {
+      color: #888;
+      font-size: 12px;
+    }
+    textarea {
+      flex: 1;
+      width: 100%;
+      background: #252525;
+      color: #d4d4d4;
+      border: 1px solid #3498db;
+      border-radius: 4px;
+      padding: 15px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+    }
+    textarea:focus {
+      border-color: #5dade2;
+      box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+    }
+    .footer {
+      margin-top: 10px;
+      color: #888;
+      font-size: 11px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📝 Notes ${notesId}</h1>
+    <div class="info">Edit, copy, and paste text here. Content is automatically preserved.</div>
+  </div>
+  <textarea id="notesContent" placeholder="Start typing your notes here...">${initialContent}</textarea>
+  <div class="footer">
+    Tip: You can copy and paste content from anywhere. Use this for context or temporary storage.
+  </div>
+</body>
+</html>`;
+      }
+
+      /**
        * Add message to chat container
        * @param {string} text - The message text
        * @param {string} type - Message type: 'system' or 'error'
@@ -1445,6 +1571,16 @@
             return;
           }
 
+          // Handle notes tabs (no need to call Electron API)
+          if (tab.type === 'notes') {
+            state.activeTabs.delete(tabId);
+            state.selectedTabs.delete(tabId);
+            state.tabLastViewTime.delete(tabId);
+            state.tabOrder = state.tabOrder.filter(id => id !== tabId);
+            renderTabs();
+            return;
+          }
+
           // Handle URL tabs
           const closedTabInfo = {
             url: tab.url,
@@ -1493,6 +1629,25 @@
           } catch (error) {
             console.error('Error opening conversation:', error);
             updateStatus(`Error opening conversation: ${error.message}`, 'error');
+          }
+          return;
+        }
+
+        // Handle notes tabs - open HTML content in browser
+        if (tab.type === 'notes') {
+          try {
+            // Create a data URL from the HTML content
+            const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(tab.htmlContent);
+
+            // Open it as a new browser tab
+            await window.electronAPI.openTab(dataUrl);
+
+            // Track last view time for sorting
+            state.tabLastViewTime.set(tabId, Date.now());
+            updateStatus('Notes tab opened in browser', 'success');
+          } catch (error) {
+            console.error('Error opening notes tab:', error);
+            updateStatus(`Error opening notes tab: ${error.message}`, 'error');
           }
           return;
         }
@@ -1851,6 +2006,7 @@
         const isSelected = state.selectedTabs.has(tabId);
         const isCurrent = state.activeTabId === tabId;
         const isConversationTab = tab.type === 'conversation';
+        const isNotesTab = tab.type === 'notes';
         const tabEl = document.createElement('div');
 
         // Add classes for visual states
@@ -1858,6 +2014,7 @@
         if (isSelected) classes.push('active');
         if (isCurrent) classes.push('current');
         if (isConversationTab) classes.push('conversation-tab');
+        if (isNotesTab) classes.push('notes-tab');
         tabEl.className = classes.join(' ');
         tabEl.draggable = true;
         tabEl.dataset.tabId = tabId;
@@ -1865,6 +2022,11 @@
         // Add visual indicator for conversation tabs
         if (isConversationTab) {
           tabEl.style.borderLeft = '3px solid #a371f7';
+        }
+
+        // Add visual indicator for notes tabs
+        if (isNotesTab) {
+          tabEl.style.borderLeft = '3px solid #3498db';
         }
 
         // Create checkbox
@@ -1883,16 +2045,17 @@
         const title = tab.title || 'Untitled';
         const currentIndicator = isCurrent ? '👁 ' : '';
         const conversationIndicator = isConversationTab ? '💬 ' : '';
+        const notesIndicator = isNotesTab ? '📝 ' : '';
         const titleSpan = document.createElement('span');
         titleSpan.className = 'tab-title';
-        titleSpan.textContent = `${currentIndicator}${conversationIndicator}${title}`;
-        titleSpan.style.fontSize = isConversationTab ? '11px' : '12px';
+        titleSpan.textContent = `${currentIndicator}${conversationIndicator}${notesIndicator}${title}`;
+        titleSpan.style.fontSize = (isConversationTab || isNotesTab) ? '11px' : '12px';
 
         // Create clickable div for tab switching
         const clickableDiv = document.createElement('div');
         clickableDiv.className = 'clickable-area';
         clickableDiv.style.cssText = 'flex: 1; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px;';
-        clickableDiv.title = isConversationTab ? 'Click to view conversation in browser' : (isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab');
+        clickableDiv.title = isConversationTab ? 'Click to view conversation in browser' : (isNotesTab ? 'Click to view notes editor in browser' : (isCurrent ? 'Currently viewing (click to refresh)' : 'Click to switch to this tab'));
         clickableDiv.draggable = false; // Prevent drag interference
         clickableDiv.appendChild(checkbox);
         clickableDiv.appendChild(titleSpan);
@@ -2145,6 +2308,12 @@
       ollamaPullBtn.addEventListener('click', pullOllamaModel);
       bookmarkBtn.addEventListener('click', toggleBookmark);
       bookmarkSearchInput.addEventListener('input', handleBookmarkSearch);
+      createNotesBtn.addEventListener('click', () => {
+        const tabId = createNotesTab();
+        updateStatus('Notes tab created', 'success');
+        // Optionally switch to the new notes tab
+        switchTab(tabId);
+      });
       sortByUrlBtn.addEventListener('click', () => setSortMode('url'));
       sortByTimeBtn.addEventListener('click', () => setSortMode('time'));
       sortManualBtn.addEventListener('click', () => setSortMode('manual'));
