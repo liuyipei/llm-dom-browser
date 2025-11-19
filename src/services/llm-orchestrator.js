@@ -12,6 +12,7 @@ const { createErrorResult } = require('../utils');
 class LLMOrchestrator {
   constructor() {
     this.contentViews = new Map();
+    this.tabManager = null;
     this.llmClient = null;
     this.requestHistory = [];
     this.maxHistory = 50;
@@ -23,6 +24,13 @@ class LLMOrchestrator {
    */
   setContentViews(contentViews) {
     this.contentViews = contentViews;
+  }
+
+  /**
+   * Set reference to tab manager (called from main.js)
+   */
+  setTabManager(tabManager) {
+    this.tabManager = tabManager;
   }
 
   /**
@@ -104,6 +112,20 @@ class LLMOrchestrator {
         const view = this.contentViews.get(tabId);
         if (!view) {
           console.warn(`Tab ${tabId} not found`);
+          continue;
+        }
+
+        // Check if this tab has stored file content (uploaded files)
+        const metadata = this.tabManager ? this.tabManager.getTabMetadata(tabId) : null;
+        if (metadata && metadata.isUploadedFile) {
+          // Use stored file content for uploaded files
+          contextItems.push({
+            tabId,
+            type: metadata.fileType,
+            title: metadata.fileName,
+            url: `file://${metadata.fileName}`,
+            content: metadata.fileContent
+          });
           continue;
         }
 

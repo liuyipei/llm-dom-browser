@@ -138,6 +138,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Show file open dialog and return selected file path
+   */
+  showOpenDialog: (options) => {
+    return ipcRenderer.invoke('show-open-dialog', options);
+  },
+
+  /**
    * Upload and process a file (PDF, text, doc)
    */
   uploadFile: (filePath, fileName) => {

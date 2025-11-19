@@ -11,6 +11,7 @@ class TabManager {
     this.mainWindow = options.mainWindow;
     this.chatView = options.chatView;
     this.contentViews = options.contentViews || new Map();
+    this.tabMetadata = new Map(); // Store additional metadata for tabs (e.g., file content)
     this.activeTabId = null;
     this.updateViewBounds = options.updateViewBounds;
     this.closedTabs = []; // Track recently closed tabs for reopen functionality
@@ -39,6 +40,13 @@ class TabManager {
    */
   setActiveTabId(tabId) {
     this.activeTabId = tabId;
+  }
+
+  /**
+   * Get metadata for a specific tab
+   */
+  getTabMetadata(tabId) {
+    return this.tabMetadata.get(tabId);
   }
 
   /**
@@ -90,10 +98,13 @@ class TabManager {
    * @param {string} url - The URL to open
    * @param {Object} options - Options for opening the tab
    * @param {boolean} options.activate - Whether to switch to the new tab (default: true)
+   * @param {Object} options.fileContent - Optional file content for uploaded files
+   * @param {string} options.fileType - Type of file ('pdf', 'text')
+   * @param {string} options.fileName - Original file name
    */
   async openTab(url, options = {}) {
     try {
-      const { activate = true } = options;
+      const { activate = true, fileContent = null, fileType = null, fileName = null } = options;
 
       const contentView = new WebContentsView({
         webPreferences: {
@@ -109,6 +120,16 @@ class TabManager {
 
       const tabId = generateId();
       this.contentViews.set(tabId, contentView);
+
+      // Store metadata if this is an uploaded file
+      if (fileContent) {
+        this.tabMetadata.set(tabId, {
+          fileContent,
+          fileType,
+          fileName,
+          isUploadedFile: true
+        });
+      }
 
       // Set bounds using DPI-safe layout function
       if (this.updateViewBounds) {
@@ -204,6 +225,7 @@ class TabManager {
         this.mainWindow.contentView.removeChildView(view);
         view.webContents.destroy();
         this.contentViews.delete(targetTabId);
+        this.tabMetadata.delete(targetTabId); // Clean up metadata
 
         // If closing active tab, switch to another tab or clear activeTabId
         if (this.activeTabId === targetTabId) {
@@ -446,6 +468,7 @@ class TabManager {
       }
     });
     this.contentViews.clear();
+    this.tabMetadata.clear();
     this.activeTabId = null;
   }
 

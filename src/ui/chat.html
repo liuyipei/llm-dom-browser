@@ -79,8 +79,7 @@
 
       <div class="input-section">
       <div class="input-row">
-        <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
-        <button id="uploadBtn" class="button-small">📤 Upload</button>
+        <button id="uploadBtn" class="button-small">📤 Upload File</button>
       </div>
 
       <div class="input-row">
@@ -158,7 +157,6 @@
       const tabList = document.getElementById('tabList');
       const urlInput = document.getElementById('urlInput');
       const openBtn = document.getElementById('openBtn');
-      const fileInput = document.getElementById('fileInput');
       const uploadBtn = document.getElementById('uploadBtn');
       const apiKeyInput = document.getElementById('apiKeyInput');
       const providerSelect = document.getElementById('providerSelect');
@@ -1287,24 +1285,38 @@
        * Upload a file
        */
       async function handleUploadFile() {
-        const file = fileInput.files[0];
-        if (!file) {
-          updateStatus('Please select a file', 'error');
-          return;
-        }
-
         try {
+          // Show file open dialog
+          const dialogResult = await window.electronAPI.showOpenDialog({
+            title: 'Select file to upload',
+            properties: ['openFile']
+          });
+
+          // Check if user canceled
+          if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length === 0) {
+            return;
+          }
+
+          const filePath = dialogResult.filePaths[0];
+          const fileName = filePath.split(/[/\\]/).pop(); // Get filename from path
+
           setLoading(true);
           updateStatus('Uploading file...');
 
-          // In a real app, you'd use a file dialog here
-          // For now, we'll mock it
-          const result = await window.electronAPI.uploadFile(file.name, file.name);
-          state.activeTabs.set(result.tabId, { url: file.name, title: result.fileName });
+          const result = await window.electronAPI.uploadFile(filePath, fileName);
 
-          addMessage(`📄 Uploaded: ${file.name}`, 'system');
+          // Add the new tab to active tabs
+          state.activeTabs.set(result.tabId, {
+            url: result.url || filePath,
+            title: result.fileName,
+            type: result.type
+          });
+
+          // Auto-select the tab so it's included in next LLM query
+          state.selectedTabs.add(result.tabId);
+
+          addMessage(`📄 Uploaded: ${fileName} (auto-selected for LLM)`, 'system');
           updateStatus('File uploaded successfully', 'success');
-          fileInput.value = '';
           renderTabs();
         } catch (error) {
           updateStatus(`Error: ${error.message}`, 'error');

@@ -68,6 +68,9 @@ function createWindow() {
   // Register the content views map with the LLM orchestrator
   llmOrchestrator.setContentViews(contentViews);
 
+  // Register the tab manager with the LLM orchestrator (for accessing file metadata)
+  llmOrchestrator.setTabManager(tabManager);
+
   // Register all IPC handlers
   ipcHandlers.registerAll();
 

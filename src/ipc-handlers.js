@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { generateId, isValidFilePath, extractFilePathFromURL, handleAsyncError, createErrorResult } = require('./utils');
@@ -211,6 +211,19 @@ class IPCHandlers {
    * Register file-related IPC handlers
    */
   registerFileHandlers() {
+    // Handle IPC: Show file open dialog
+    ipcMain.handle('show-open-dialog', async (event, options) => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Supported Files', extensions: ['pdf', 'txt', 'md', 'doc', 'docx'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        ...options
+      });
+      return result;
+    });
+
     // Handle IPC: Upload and process file
     ipcMain.handle('upload-file', handleAsyncError(async (event, { filePath, fileName }) => {
       // Validate file path for security
@@ -228,24 +241,82 @@ class IPCHandlers {
       if (ext === '.pdf') {
         // Process PDF
         const pdfText = await this.pdfService.extractText(filePath);
-        const tabId = generateId();
+
+        // Create a background tab with the PDF file
+        const fileUrl = `file://${filePath}`;
+        const tabInfo = await this.tabManager.openTab(fileUrl, {
+          activate: false, // Open in background
+          fileContent: pdfText,
+          fileType: 'pdf',
+          fileName: fileName
+        });
+
         return {
-          tabId,
+          tabId: tabInfo.id,
           fileName,
           type: 'pdf',
           textPreview: pdfText.slice(0, 500),
-          fullPath: filePath
+          fullPath: filePath,
+          url: fileUrl
         };
       } else if (['.txt', '.md', '.doc', '.docx'].includes(ext)) {
         // Process text files
         let content = fs.readFileSync(filePath, 'utf-8');
-        const tabId = generateId();
+
+        // Create an HTML page to display the text content
+        const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${fileName}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+      line-height: 1.6;
+      color: #333;
+      background: #fff;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    h1 {
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>${fileName}</h1>
+  <pre>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+</body>
+</html>`;
+
+        // Create a data URL for the HTML content
+        const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
+
+        // Create a background tab with the text file
+        const tabInfo = await this.tabManager.openTab(dataUrl, {
+          activate: false, // Open in background
+          fileContent: content,
+          fileType: 'text',
+          fileName: fileName
+        });
+
         return {
-          tabId,
+          tabId: tabInfo.id,
           fileName,
           type: 'text',
           content: content.slice(0, 5000),
-          fullPath: filePath
+          fullPath: filePath,
+          url: dataUrl
         };
       } else {
         throw new Error(`Unsupported file type: ${ext}`);
