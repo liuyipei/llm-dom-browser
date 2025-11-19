@@ -56,19 +56,22 @@ class TabManager {
   _setupTabEventListeners(contentView, tabId, url) {
     // Listen for load start
     contentView.webContents.on('did-start-loading', () => {
-      console.log(`Tab ${tabId} started loading: ${url}`);
+      const displayUrl = url.startsWith('data:') ? url.substring(0, 50) + '...' : url;
+      console.log(`Tab ${tabId} started loading: ${displayUrl}`);
     });
 
     // Listen for load failures
     contentView.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-      console.error(`Tab ${tabId} failed to load: ${errorDescription} (${errorCode}) - ${validatedURL}`);
+      const displayUrl = validatedURL.startsWith('data:') ? validatedURL.substring(0, 50) + '...' : validatedURL;
+      console.error(`Tab ${tabId} failed to load: ${errorDescription} (${errorCode}) - ${displayUrl}`);
     });
 
     // Listen for page load completion to update title
     contentView.webContents.on('did-finish-load', () => {
       const title = contentView.webContents.getTitle();
       const currentUrl = contentView.webContents.getURL();
-      console.log(`Tab ${tabId} finished loading: ${title} (URL: ${currentUrl})`);
+      const displayUrl = currentUrl.startsWith('data:') ? currentUrl.substring(0, 50) + '...' : currentUrl;
+      console.log(`Tab ${tabId} finished loading: ${title} (URL: ${displayUrl})`);
 
       // Send title update to chat UI
       if (this.chatView && this.chatView.webContents) {
@@ -139,7 +142,8 @@ class TabManager {
       // Intercept Ctrl+Click and other window opening requests
       // This is the correct way to handle Ctrl+Click in Electron
       contentView.webContents.setWindowOpenHandler(({ url: newUrl, frameName, features, disposition }) => {
-        console.log(`[Tab ${tabId}] Window open request: ${newUrl}, disposition: ${disposition}, features: ${features}`);
+        const displayNewUrl = newUrl.startsWith('data:') ? newUrl.substring(0, 50) + '...' : newUrl;
+        console.log(`[Tab ${tabId}] Window open request: ${displayNewUrl}, disposition: ${disposition}, features: ${features}`);
 
         // Disposition tells us how the window was requested:
         // - 'foreground-tab': Ctrl+Shift+Click or Cmd+Shift+Click
@@ -152,7 +156,7 @@ class TabManager {
         // Open in background for: background-tab and other
         const shouldActivate = disposition === 'foreground-tab' || disposition === 'new-window';
 
-        console.log(`[Tab ${tabId}] Opening URL in new ${shouldActivate ? 'foreground' : 'background'} tab: ${newUrl}`);
+        console.log(`[Tab ${tabId}] Opening URL in new ${shouldActivate ? 'foreground' : 'background'} tab: ${displayNewUrl}`);
 
         // Create new tab asynchronously (don't await here to avoid blocking)
         this.openTab(newUrl, { activate: shouldActivate }).catch((error) => {
@@ -190,7 +194,8 @@ class TabManager {
       // Get the current title (might be empty if page hasn't loaded yet)
       const currentTitle = contentView.webContents.getTitle();
 
-      console.log(`Opened tab ${tabId} with URL: ${url}, initial title: ${currentTitle}, activated: ${shouldActivate}`);
+      const displayUrl = url.startsWith('data:') ? url.substring(0, 50) + '...' : url;
+      console.log(`Opened tab ${tabId} with URL: ${displayUrl}, initial title: ${currentTitle}, activated: ${shouldActivate}`);
       return { id: tabId, url, title: currentTitle || 'Loading...', isActive: tabId === this.activeTabId };
     } catch (error) {
       console.error('Error opening tab:', error);
@@ -371,7 +376,8 @@ class TabManager {
     const lastClosed = this.closedTabs.pop();
     try {
       const result = await this.openTab(lastClosed.url);
-      console.log(`Reopened tab: ${lastClosed.url}`);
+      const displayUrl = lastClosed.url.startsWith('data:') ? lastClosed.url.substring(0, 50) + '...' : lastClosed.url;
+      console.log(`Reopened tab: ${displayUrl}`);
       return { success: true, ...result };
     } catch (error) {
       console.error('Error reopening tab:', error);

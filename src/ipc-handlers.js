@@ -51,7 +51,8 @@ class IPCHandlers {
     // This is sent from content-preload.js when user Ctrl+clicks or middle-clicks a link
     ipcMain.on('open-link-in-new-tab', async (event, { url, foreground }) => {
       try {
-        console.log(`Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${url}`);
+        const displayUrl = url.startsWith('data:') ? url.substring(0, 50) + '...' : url;
+        console.log(`Opening link in new ${foreground ? 'foreground' : 'background'} tab: ${displayUrl}`);
         await this.tabManager.openTab(url, { activate: foreground });
       } catch (error) {
         console.error('Error opening link in new tab:', error);
