@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { generateId, isValidFilePath, extractFilePathFromURL, handleAsyncError, createErrorResult } = require('./utils');
@@ -211,6 +211,19 @@ class IPCHandlers {
    * Register file-related IPC handlers
    */
   registerFileHandlers() {
+    // Handle IPC: Show file open dialog
+    ipcMain.handle('show-open-dialog', async (event, options) => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Supported Files', extensions: ['pdf', 'txt', 'md', 'doc', 'docx'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        ...options
+      });
+      return result;
+    });
+
     // Handle IPC: Upload and process file
     ipcMain.handle('upload-file', handleAsyncError(async (event, { filePath, fileName }) => {
       // Validate file path for security
