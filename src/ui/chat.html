@@ -1371,55 +1371,110 @@
             timestamp: Date.now()
           };
 
-          const result = await window.electronAPI.queryLLM(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
-
-          if (result.success) {
-            // Create conversation tab with both messages
-            const stats = {
-              latencyMs: result.latencyMs,
-              usage: result.usage,
-              tokensUsed: result.tokensUsed,
-              model: result.model
+          // Collect source tab information
+          const sourceTabs = tabIds.map(id => {
+            const tab = state.activeTabs.get(id);
+            return {
+              id: id,
+              title: tab ? tab.title : 'Unknown Tab',
+              url: tab ? tab.url : ''
             };
+          });
 
-            // Collect source tab information
-            const sourceTabs = tabIds.map(id => {
-              const tab = state.activeTabs.get(id);
-              return {
-                id: id,
-                title: tab ? tab.title : 'Unknown Tab',
-                url: tab ? tab.url : ''
-              };
-            });
+          // Create conversation tab immediately for streaming
+          let tabId = null;
+          let fullResponse = '';
+          let streamStats = {
+            latencyMs: 0,
+            usage: {},
+            tokensUsed: 0,
+            model: model
+          };
 
-            const tabId = createConversationTab(query, result.response, stats, sourceTabs, includeMedia);
+          // Use streaming API
+          const stream = window.electronAPI.queryLLMStreaming(
+            query,
+            tabIds,
+            apiKey,
+            provider,
+            model,
+            includeMedia,
+            customEndpoint,
+            {
+              onChunk: (chunk) => {
+                if (chunk.type === 'start') {
+                  // Create conversation tab when stream starts
+                  if (!tabId) {
+                    tabId = createConversationTab(query, '', streamStats, sourceTabs, includeMedia);
+                  }
+                } else if (chunk.type === 'chunk') {
+                  // Append chunk to response
+                  fullResponse += chunk.delta || chunk.text || '';
 
-            // Add conversation summary to chat container (metadata only)
-            const tab = state.activeTabs.get(tabId);
-            addConversationToChat(
-              tabId,
-              tab.id,
-              tab.userTokens,
-              tab.assistantTokens,
-              stats
-            );
+                  // Update the conversation tab with streaming text
+                  if (tabId) {
+                    const tab = state.activeTabs.get(tabId);
+                    if (tab) {
+                      tab.assistantMessage = fullResponse;
+                      tab.assistantTokens = estimateTokenCount(fullResponse);
+                      // Re-render tabs to show updated content
+                      renderTabs();
+                    }
+                  }
 
-            updateStatus(
-              `Response generated using ${result.provider}`,
-              'success'
-            );
-          } else {
-            updateStatus(`Error: ${result.error}`, 'error');
-            addMessage(`❌ ${result.error}`, 'error');
-            state.pendingConversation = null; // Clear pending on error
-          }
+                  updateStatus(`Streaming response from ${provider}...`);
+                } else if (chunk.type === 'done') {
+                  // Update final stats
+                  streamStats.latencyMs = chunk.latencyMs || 0;
+                  streamStats.usage = chunk.usage || {};
+                  streamStats.tokensUsed = chunk.tokensUsed || 0;
+
+                  if (tabId) {
+                    const tab = state.activeTabs.get(tabId);
+                    if (tab) {
+                      tab.stats = streamStats;
+                    }
+
+                    // Add conversation summary to chat container
+                    addConversationToChat(
+                      tabId,
+                      tab.id,
+                      tab.userTokens,
+                      tab.assistantTokens,
+                      streamStats
+                    );
+                  }
+
+                  updateStatus(
+                    `Response generated using ${provider}`,
+                    'success'
+                  );
+                } else if (chunk.type === 'error') {
+                  throw new Error(chunk.error || 'Streaming error');
+                }
+              },
+              onComplete: () => {
+                console.log('Stream completed');
+                setLoading(false);
+              },
+              onError: (error) => {
+                console.error('Stream error:', error);
+                updateStatus(`Error: ${error.message}`, 'error');
+                addMessage(`❌ ${error.message}`, 'error');
+                state.pendingConversation = null;
+                setLoading(false);
+              }
+            }
+          );
+
+          // Wait for the streaming to complete
+          await stream.promise;
 
           queryInput.value = '';
         } catch (error) {
           updateStatus(`Error: ${error.message}`, 'error');
           addMessage(`❌ ${error.message}`, 'error');
           state.pendingConversation = null; // Clear pending on error
-        } finally {
           setLoading(false);
         }
       }

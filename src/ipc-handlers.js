@@ -138,6 +138,24 @@ class IPCHandlers {
     ipcMain.handle('query-llm', handleAsyncError(async (event, { query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
       return await this.llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
     }));
+
+    // Handle IPC: Send query to LLM with streaming support
+    ipcMain.handle('query-llm-streaming', async (event, { requestId, query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
+      try {
+        // Start streaming and send chunks back to renderer
+        for await (const chunk of this.llmOrchestrator.analyzeContentStreaming(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint)) {
+          event.sender.send('llm-stream-chunk', { requestId, chunk });
+        }
+
+        // Send completion signal
+        event.sender.send('llm-stream-complete', { requestId });
+        return { success: true, requestId };
+      } catch (error) {
+        console.error('Error in streaming LLM query:', error);
+        event.sender.send('llm-stream-error', { requestId, error: error.message });
+        return createErrorResult(error);
+      }
+    });
   }
 
   /**

@@ -84,6 +84,86 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * Send a query to the LLM with streaming support
+   * Returns an object with cleanup function
+   */
+  queryLLMStreaming: (query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null, callbacks = {}) => {
+    if (typeof query !== 'string' || !query.trim()) {
+      throw new Error('Invalid query');
+    }
+    if (!Array.isArray(tabIds)) {
+      throw new Error('Tab IDs must be an array');
+    }
+    // API key validation is optional for local providers
+    if (typeof apiKey !== 'string') {
+      apiKey = ''; // Allow empty API key for local providers
+    }
+
+    // Generate unique request ID
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Set up event listeners for streaming
+    const chunkListener = (event, data) => {
+      if (data.requestId === requestId) {
+        if (callbacks.onChunk && typeof callbacks.onChunk === 'function') {
+          callbacks.onChunk(data.chunk);
+        }
+      }
+    };
+
+    const completeListener = (event, data) => {
+      if (data.requestId === requestId) {
+        if (callbacks.onComplete && typeof callbacks.onComplete === 'function') {
+          callbacks.onComplete();
+        }
+        // Clean up listeners after completion
+        cleanup();
+      }
+    };
+
+    const errorListener = (event, data) => {
+      if (data.requestId === requestId) {
+        if (callbacks.onError && typeof callbacks.onError === 'function') {
+          callbacks.onError(new Error(data.error || 'Streaming error'));
+        }
+        // Clean up listeners after error
+        cleanup();
+      }
+    };
+
+    // Function to clean up listeners
+    const cleanup = () => {
+      ipcRenderer.removeListener('llm-stream-chunk', chunkListener);
+      ipcRenderer.removeListener('llm-stream-complete', completeListener);
+      ipcRenderer.removeListener('llm-stream-error', errorListener);
+    };
+
+    // Attach listeners
+    ipcRenderer.on('llm-stream-chunk', chunkListener);
+    ipcRenderer.on('llm-stream-complete', completeListener);
+    ipcRenderer.on('llm-stream-error', errorListener);
+
+    // Start the streaming request
+    const invokePromise = ipcRenderer.invoke('query-llm-streaming', {
+      requestId,
+      query: query.trim(),
+      tabIds,
+      apiKey,
+      provider,
+      model,
+      includeMedia,
+      customEndpoint
+    });
+
+    // Return cleanup function and request ID
+    return {
+      requestId,
+      cleanup,
+      promise: invokePromise
+    };
+  },
+
+  /**
    * Get available providers and models
    */
   getProviders: () => {

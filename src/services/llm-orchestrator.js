@@ -272,6 +272,96 @@ class LLMOrchestrator {
   }
 
   /**
+   * Analyze content with streaming support
+   */
+  async *analyzeContentStreaming(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+    try {
+      if (!query || typeof query !== 'string') {
+        throw new Error('Invalid query');
+      }
+
+      // API key is optional for local providers (Ollama, vLLM, LM Studio)
+      const isLocalProvider = OPTIONAL_API_KEY_PROVIDERS.includes(provider);
+      if (!isLocalProvider && (!apiKey || typeof apiKey !== 'string')) {
+        throw new Error('API key is required');
+      }
+
+      if (!Array.isArray(tabIds)) {
+        throw new Error('Tab IDs must be an array');
+      }
+
+      // Extract content from all specified tabs
+      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia });
+
+      if (contextItems.length === 0) {
+        throw new Error('No content available from specified tabs');
+      }
+
+      // Build the LLM prompt with extracted content
+      const prompt = this._buildPrompt(query, contextItems);
+
+      // Track latency
+      const startTime = Date.now();
+
+      // Send initial metadata
+      yield {
+        type: 'start',
+        contextSize: contextItems.length,
+        provider,
+        model
+      };
+
+      // Stream from LLM API
+      let fullText = '';
+      let usage = {};
+
+      for await (const chunk of this._queryRemoteLLMStreaming(prompt, apiKey, provider, model, includeMedia, customEndpoint)) {
+        fullText += chunk.text || '';
+        if (chunk.usage) {
+          usage = chunk.usage;
+        }
+
+        // Yield the chunk to the caller
+        yield {
+          type: 'chunk',
+          text: chunk.text || '',
+          delta: chunk.text || ''
+        };
+      }
+
+      const latencyMs = Date.now() - startTime;
+
+      // Store in history
+      this._addToHistory({
+        timestamp: new Date().toISOString(),
+        query,
+        tabIds,
+        provider,
+        model,
+        includeMedia,
+        contextLength: prompt.length,
+        responseLength: fullText.length,
+        latencyMs,
+        usage
+      });
+
+      // Send completion metadata
+      yield {
+        type: 'done',
+        latencyMs,
+        usage,
+        tokensUsed: usage?.total_tokens || Math.ceil(prompt.length / 4)
+      };
+    } catch (error) {
+      console.error('Error analyzing content:', error);
+      yield {
+        type: 'error',
+        error: error.message || 'Unknown error'
+      };
+    }
+  }
+
+  /**
    * Send query to LLM API (local or remote) using the selected provider
    */
   async _queryRemoteLLM(prompt, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
@@ -307,6 +397,49 @@ class LLMOrchestrator {
     }
 
     return response;
+  }
+
+  /**
+   * Send query to LLM API with streaming support
+   */
+  async *_queryRemoteLLMStreaming(prompt, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+    // Create provider instance with optional custom endpoint
+    const config = {
+      apiKey,
+      model
+    };
+
+    // Add custom endpoint if provided
+    if (customEndpoint) {
+      config.baseUrl = customEndpoint;
+    }
+
+    const providerInstance = ProviderFactory.createProvider(provider, config);
+
+    this.currentProvider = providerInstance;
+
+    // Check if provider supports streaming
+    if (typeof providerInstance.generateStreamingCompletion !== 'function') {
+      // Fallback to non-streaming for providers that don't support it
+      const response = await providerInstance.generateCompletion(prompt, {
+        temperature: 0.7,
+        maxTokens: 2000
+      });
+
+      const text = typeof response === 'string' ? response : response.text;
+      const usage = typeof response === 'object' ? response.usage : {};
+
+      yield { text, usage };
+      return;
+    }
+
+    // Generate streaming completion using the provider
+    for await (const chunk of providerInstance.generateStreamingCompletion(prompt, {
+      temperature: 0.7,
+      maxTokens: 2000
+    })) {
+      yield chunk;
+    }
   }
 
   /**
