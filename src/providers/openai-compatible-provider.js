@@ -69,7 +69,7 @@ class OpenAICompatibleProvider extends BaseProvider {
    * Generate a streaming completion
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {AsyncGenerator<string>} - Stream of text chunks
+   * @returns {AsyncGenerator<Object>} - Stream of chunk objects with text and usage
    */
   async *generateStreamingCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/chat/completions`;
@@ -81,7 +81,8 @@ class OpenAICompatibleProvider extends BaseProvider {
       ],
       temperature: options.temperature || 0.7,
       max_tokens: options.maxTokens || 2000,
-      stream: true
+      stream: true,
+      stream_options: { include_usage: true } // Request usage stats in stream
     };
 
     const response = await this.fetchWithRetry(url, {
@@ -97,8 +98,14 @@ class OpenAICompatibleProvider extends BaseProvider {
 
     for await (const chunk of this.streamResponse(response)) {
       const content = chunk.choices?.[0]?.delta?.content;
-      if (content) {
-        yield content;
+      const usage = chunk.usage; // Usage appears in final chunk
+
+      // Yield chunk with text and usage (if available)
+      if (content || usage) {
+        yield {
+          text: content || '',
+          usage: usage || undefined
+        };
       }
     }
   }

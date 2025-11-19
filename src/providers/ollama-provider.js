@@ -83,7 +83,7 @@ class OllamaProvider extends LocalProvider {
    * Generate a streaming completion
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {AsyncGenerator<string>} - Stream of text chunks
+   * @returns {AsyncGenerator<Object>} - Stream of chunk objects with text and usage
    */
   async *generateStreamingCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/api/chat`;
@@ -120,8 +120,29 @@ class OllamaProvider extends LocalProvider {
 
     const parsePromise = this.parseStream(response, (data) => {
       const content = data.message?.content;
+
+      // Yield text chunks
       if (content) {
-        chunks.push(content);
+        chunks.push({
+          text: content,
+          usage: undefined
+        });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      }
+
+      // Yield usage info from final chunk (when done: true)
+      if (data.done && (data.prompt_eval_count || data.eval_count)) {
+        chunks.push({
+          text: '',
+          usage: {
+            prompt_tokens: data.prompt_eval_count || 0,
+            completion_tokens: data.eval_count || 0,
+            total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+          }
+        });
         if (resolveNext) {
           resolveNext();
           resolveNext = null;

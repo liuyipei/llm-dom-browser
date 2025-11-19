@@ -65,7 +65,7 @@ class AnthropicProvider extends BaseProvider {
    * Generate a streaming completion
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Options like temperature, maxTokens
-   * @returns {AsyncGenerator<string>} - Stream of text chunks
+   * @returns {AsyncGenerator<Object>} - Stream of chunk objects with text and usage
    */
   async *generateStreamingCompletion(prompt, options = {}) {
     const url = `${this.baseUrl}/messages`;
@@ -96,8 +96,19 @@ class AnthropicProvider extends BaseProvider {
     }
 
     for await (const chunk of this.streamResponse(response)) {
+      // Handle text deltas
       if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-        yield chunk.delta.text;
+        yield {
+          text: chunk.delta.text || '',
+          usage: undefined
+        };
+      }
+      // Handle usage information in message_delta events
+      else if (chunk.type === 'message_delta' && chunk.usage) {
+        yield {
+          text: '',
+          usage: chunk.usage
+        };
       }
     }
   }
