@@ -267,9 +267,9 @@ class LLMOrchestrator {
               }
             }
 
-            if (domData) {
-              contextItems.push(contextItem);
-            }
+            // Always add the item, even if domData is null
+            // (LLM can still use basic title/url information)
+            contextItems.push(contextItem);
           } catch (jsError) {
             console.warn(`Failed to extract DOM from tab ${tabId}:`, jsError);
             contextItems.push({
