@@ -71,6 +71,9 @@ function createWindow() {
   // Register the tab manager with the LLM orchestrator (for accessing file metadata)
   llmOrchestrator.setTabManager(tabManager);
 
+  // Register the window manager with the LLM orchestrator (for accessing UI tab data)
+  llmOrchestrator.setWindowManager(windowManager);
+
   // Register all IPC handlers
   ipcHandlers.registerAll();
 
