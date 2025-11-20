@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
-   * Send a query to the LLM with context from selected tabs
+   * Send a query to the LLM with context from selected tabs (non-streaming)
    */
   queryLLM: (query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) => {
     if (typeof query !== 'string' || !query.trim()) {
@@ -81,6 +81,84 @@ contextBridge.exposeInMainWorld('electronAPI', {
       includeMedia,
       customEndpoint
     });
+  },
+
+  /**
+   * Start streaming LLM query
+   * Returns a requestId to track this stream
+   */
+  startLLMStream: (requestId, query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) => {
+    if (typeof requestId !== 'string' || !requestId.trim()) {
+      throw new Error('Invalid request ID');
+    }
+    if (typeof query !== 'string' || !query.trim()) {
+      throw new Error('Invalid query');
+    }
+    if (!Array.isArray(tabIds)) {
+      throw new Error('Tab IDs must be an array');
+    }
+    // API key validation is optional for local providers
+    if (typeof apiKey !== 'string') {
+      apiKey = ''; // Allow empty API key for local providers
+    }
+    ipcRenderer.send('start-llm-stream', {
+      requestId: requestId.trim(),
+      query: query.trim(),
+      tabIds,
+      apiKey,
+      provider,
+      model,
+      includeMedia,
+      customEndpoint
+    });
+  },
+
+  /**
+   * Cancel streaming LLM query
+   */
+  cancelLLMStream: (requestId) => {
+    if (typeof requestId !== 'string' || !requestId.trim()) {
+      throw new Error('Invalid request ID');
+    }
+    ipcRenderer.send('cancel-llm-stream', {
+      requestId: requestId.trim()
+    });
+  },
+
+  /**
+   * Listen for LLM stream chunks
+   */
+  onLLMStreamChunk: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('llm-stream-chunk', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('llm-stream-chunk', listener);
+  },
+
+  /**
+   * Listen for LLM stream completion
+   */
+  onLLMStreamComplete: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('llm-stream-complete', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('llm-stream-complete', listener);
+  },
+
+  /**
+   * Listen for LLM stream errors
+   */
+  onLLMStreamError: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+    ipcRenderer.on('llm-stream-error', listener);
+    // Return unsubscribe function
+    return () => ipcRenderer.removeListener('llm-stream-error', listener);
   },
 
   /**

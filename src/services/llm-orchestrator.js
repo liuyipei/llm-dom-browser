@@ -160,6 +160,99 @@ class LLMOrchestrator {
   }
 
   /**
+   * Analyze content with streaming response
+   * Yields text chunks as they arrive from the LLM
+   * @param {string} query - User's question
+   * @param {Array<number>} tabIds - IDs of tabs to analyze
+   * @param {string} apiKey - API key for the provider
+   * @param {string} provider - Provider name (e.g., 'fireworks', 'openai')
+   * @param {string} model - Model name (may include deployment ID for Fireworks)
+   * @param {boolean} includeMedia - Whether to include images in context
+   * @param {string} customEndpoint - Custom endpoint for local providers
+   * @returns {AsyncGenerator<{type: string, content?: string, metadata?: Object}>}
+   */
+  async *analyzeContentStreaming(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+    try {
+      if (!query || typeof query !== 'string') {
+        throw new Error('Invalid query');
+      }
+
+      // API key is optional for local providers (Ollama, vLLM, LM Studio)
+      const isLocalProvider = OPTIONAL_API_KEY_PROVIDERS.includes(provider);
+      if (!isLocalProvider && (!apiKey || typeof apiKey !== 'string')) {
+        throw new Error('API key is required');
+      }
+
+      if (!Array.isArray(tabIds)) {
+        throw new Error('Tab IDs must be an array');
+      }
+
+      // Extract content from all specified tabs
+      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia });
+
+      if (contextItems.length === 0) {
+        throw new Error('No content available from specified tabs');
+      }
+
+      // Build the LLM prompt with extracted content
+      const prompt = this._buildPrompt(query, contextItems);
+
+      // Track latency
+      const startTime = Date.now();
+
+      // Stream from LLM API (local or remote)
+      let fullText = '';
+      let chunkCount = 0;
+
+      for await (const chunk of this._queryRemoteLLMStreaming(prompt, apiKey, provider, model, includeMedia, customEndpoint)) {
+        fullText += chunk;
+        chunkCount++;
+        yield { type: 'chunk', content: chunk };
+      }
+
+      const latencyMs = Date.now() - startTime;
+
+      // Store in history
+      this._addToHistory({
+        timestamp: new Date().toISOString(),
+        query,
+        tabIds,
+        provider,
+        model,
+        includeMedia,
+        contextLength: prompt.length,
+        responseLength: fullText.length,
+        latencyMs,
+        streaming: true,
+        chunkCount
+      });
+
+      // Yield completion metadata
+      yield {
+        type: 'complete',
+        metadata: {
+          success: true,
+          contextSize: contextItems.length,
+          provider,
+          model,
+          latencyMs,
+          tokensUsed: Math.ceil(prompt.length / 4) + Math.ceil(fullText.length / 4),
+          chunkCount
+        }
+      };
+    } catch (error) {
+      console.error('Error analyzing content (streaming):', error);
+      yield {
+        type: 'error',
+        error: {
+          message: error.message,
+          code: error.code || 'STREAM_ERROR'
+        }
+      };
+    }
+  }
+
+  /**
    * Extract content from specified tabs
    */
   async _extractContextFromTabs(tabIds, options = {}) {
@@ -423,6 +516,37 @@ class LLMOrchestrator {
     }
 
     return response;
+  }
+
+  /**
+   * Stream query to LLM API (local or remote) using the selected provider
+   * @returns {AsyncGenerator<string>} - Stream of text chunks
+   */
+  async *_queryRemoteLLMStreaming(prompt, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+    // Create provider instance with optional custom endpoint
+    const config = {
+      apiKey,
+      model
+    };
+
+    // Add custom endpoint if provided
+    if (customEndpoint) {
+      config.baseUrl = customEndpoint;
+    }
+
+    const providerInstance = ProviderFactory.createProvider(provider, config);
+
+    this.currentProvider = providerInstance;
+
+    // Generate streaming completion using the provider
+    // Note: For vision models, image URLs are included in the prompt text
+    // Future enhancement: Use multimodal message format for proper vision API support
+    for await (const chunk of providerInstance.generateStreamingCompletion(prompt, {
+      temperature: 0.7,
+      maxTokens: 2000
+    })) {
+      yield chunk;
+    }
   }
 
   /**
