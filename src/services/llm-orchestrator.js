@@ -251,8 +251,8 @@ class LLMOrchestrator {
             const contextItem = {
               tabId,
               type: 'html',
-              title: domData.title || title,
-              url: domData.url || url,
+              title: domData?.title || title,
+              url: domData?.url || url,
               dom: domData
             };
 
