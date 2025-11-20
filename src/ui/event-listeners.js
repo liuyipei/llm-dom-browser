@@ -79,13 +79,12 @@ providerSelect.addEventListener('change', async (e) => {
     // Restore API key requirement
     apiKeyInput.placeholder = 'API Key...';
 
-    // Load saved API key for new provider
+    // Load saved API key for new provider (always load to clear any stale local provider values)
     const savedApiKey = storage.getApiKey(newProvider);
+    apiKeyInput.value = savedApiKey;
     if (savedApiKey) {
-      apiKeyInput.value = savedApiKey;
       console.log(`Restored API key for provider: ${newProvider}`);
     }
-    // Note: Don't clear the field if no saved key - let user keep their current input
   }
 
   // Show/hide Fireworks deployment field

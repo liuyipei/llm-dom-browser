@@ -53,10 +53,10 @@ async function initialize() {
     ollamaManagement.style.display = 'none';
     apiKeyInput.placeholder = 'API Key...';
 
-    // Restore API key for cloud provider
+    // Restore API key for cloud provider (always load to ensure clean state)
     const savedApiKey = storage.getApiKey(provider);
+    apiKeyInput.value = savedApiKey;
     if (savedApiKey) {
-      apiKeyInput.value = savedApiKey;
       console.log(`Restored API key on init for provider: ${provider}`);
     }
   }
