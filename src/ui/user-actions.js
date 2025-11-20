@@ -212,8 +212,7 @@ async function handleSendQuery() {
 }
 
 /**
- * Send streaming query to LLM (for testing)
- * This is a test version that logs chunks to console
+ * Send streaming query to LLM with live UI updates
  */
 async function handleSendQueryStreaming() {
   const query = queryInput.value.trim();
@@ -230,7 +229,7 @@ async function handleSendQueryStreaming() {
     const deploymentId = fireworksDeploymentInput.value.trim();
     if (deploymentId && model) {
       model = `${model}#${deploymentId}`;
-      console.log(`[STREAM TEST] Using Fireworks deployment: ${model}`);
+      console.log(`Using Fireworks deployment: ${model}`);
     }
   }
 
@@ -260,57 +259,130 @@ async function handleSendQueryStreaming() {
 
   try {
     setLoading(true);
-    updateStatus(`[STREAM TEST] Analyzing content with ${provider}...`);
+    updateStatus(`Streaming response from ${provider}...`);
+
+    // Store user message for tab creation
+    state.pendingConversation = {
+      userMessage: query,
+      estimatedTokens: estimateTokenCount(query),
+      timestamp: Date.now()
+    };
+
+    // Collect source tab information
+    const sourceTabs = tabIds.map(id => {
+      const tab = state.activeTabs.get(id);
+      return {
+        id: id,
+        title: tab ? tab.title : 'Unknown Tab',
+        url: tab ? tab.url : ''
+      };
+    });
+
+    // Create conversation tab immediately with loading state
+    const conversationTabId = createStreamingConversationTab(
+      query,
+      '⏳ Waiting for response...',
+      { model, provider },
+      sourceTabs,
+      includeMedia
+    );
 
     // Generate unique request ID
     const requestId = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`[STREAM TEST] Request ID: ${requestId}`);
-    console.log(`[STREAM TEST] Provider: ${provider}, Model: ${model}`);
-    console.log(`[STREAM TEST] Query: ${query}`);
+    console.log(`[Stream] Request ${requestId} started`);
 
-    // Accumulate streamed text
+    // Streaming state
     let streamedText = '';
     let chunkCount = 0;
     const startTime = Date.now();
+    let lastRenderTime = 0;
+    const RENDER_DEBOUNCE_MS = 80; // Render at most every 80ms
+
+    // Debounced update function
+    const updateTabContent = () => {
+      const now = Date.now();
+      if (now - lastRenderTime >= RENDER_DEBOUNCE_MS) {
+        updateStreamingConversationTab(
+          conversationTabId,
+          streamedText + ' ▌', // Add blinking cursor
+          { model, provider, streaming: true, chunkCount }
+        );
+        lastRenderTime = now;
+      }
+    };
 
     // Set up event listeners
     const unsubChunk = window.electronAPI.onLLMStreamChunk((data) => {
       if (data.requestId === requestId) {
         chunkCount++;
         streamedText += data.content;
-        console.log(`[STREAM TEST] Chunk #${chunkCount}:`, JSON.stringify(data.content));
-        console.log(`[STREAM TEST] Total text so far: ${streamedText.length} chars`);
+        updateTabContent();
       }
     });
 
     const unsubComplete = window.electronAPI.onLLMStreamComplete((data) => {
       if (data.requestId === requestId) {
         const elapsed = Date.now() - startTime;
-        console.log(`[STREAM TEST] ✅ Stream complete!`);
-        console.log(`[STREAM TEST] Total chunks: ${chunkCount}`);
-        console.log(`[STREAM TEST] Total text: ${streamedText.length} chars`);
-        console.log(`[STREAM TEST] Time: ${elapsed}ms`);
-        console.log(`[STREAM TEST] Metadata:`, data.metadata);
-        console.log(`[STREAM TEST] Full text:\n`, streamedText);
+        console.log(`[Stream] Complete: ${chunkCount} chunks in ${elapsed}ms`);
 
-        updateStatus(`[STREAM TEST] Stream complete: ${chunkCount} chunks, ${streamedText.length} chars`, 'success');
-        addMessage(`✅ Stream complete: ${chunkCount} chunks in ${elapsed}ms`, 'system');
+        // Final update without cursor
+        updateStreamingConversationTab(
+          conversationTabId,
+          streamedText,
+          {
+            model: data.metadata.model || model,
+            provider: data.metadata.provider || provider,
+            latencyMs: data.metadata.latencyMs || elapsed,
+            tokensUsed: data.metadata.tokensUsed,
+            streaming: false,
+            chunkCount
+          }
+        );
 
-        // Clean up listeners
+        // Add conversation summary to chat
+        const tab = state.activeTabs.get(conversationTabId);
+        addConversationToChat(
+          conversationTabId,
+          tab.id,
+          tab.userTokens,
+          tab.assistantTokens,
+          {
+            latencyMs: data.metadata.latencyMs,
+            usage: {},
+            model: data.metadata.model
+          }
+        );
+
+        updateStatus(`Response complete: ${chunkCount} chunks in ${(elapsed/1000).toFixed(1)}s`, 'success');
+
+        // Clean up
         unsubChunk();
         unsubComplete();
         unsubError();
         setLoading(false);
+        queryInput.value = '';
       }
     });
 
     const unsubError = window.electronAPI.onLLMStreamError((data) => {
       if (data.requestId === requestId) {
-        console.error(`[STREAM TEST] ❌ Stream error:`, data.error);
-        updateStatus(`[STREAM TEST] Error: ${data.error.message}`, 'error');
-        addMessage(`❌ Stream error: ${data.error.message}`, 'error');
+        console.error(`[Stream] Error:`, data.error);
 
-        // Clean up listeners
+        // Update tab with error message
+        const errorMessage = streamedText
+          ? streamedText + `\n\n---\n❌ **Error:** ${data.error.message}`
+          : `❌ **Error:** ${data.error.message}`;
+
+        updateStreamingConversationTab(
+          conversationTabId,
+          errorMessage,
+          { model, provider, streaming: false, error: true }
+        );
+
+        updateStatus(`Error: ${data.error.message}`, 'error');
+        addMessage(`❌ ${data.error.message}`, 'error');
+
+        // Clean up
         unsubChunk();
         unsubComplete();
         unsubError();
@@ -330,12 +402,11 @@ async function handleSendQueryStreaming() {
       customEndpoint
     );
 
-    console.log(`[STREAM TEST] Stream started, waiting for chunks...`);
-
   } catch (error) {
-    console.error(`[STREAM TEST] Exception:`, error);
+    console.error(`[Stream] Exception:`, error);
     updateStatus(`Error: ${error.message}`, 'error');
     addMessage(`❌ ${error.message}`, 'error');
     setLoading(false);
+    state.pendingConversation = null;
   }
 }

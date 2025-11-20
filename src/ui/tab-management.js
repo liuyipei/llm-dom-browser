@@ -83,6 +83,127 @@ function createConversationTab(userMessage, assistantMessage, stats = null, sour
 }
 
 /**
+ * Create a conversation tab with streaming support (initially in loading state)
+ * @param {string} userMessage - The user's message
+ * @param {string} initialAssistantMessage - Initial placeholder message
+ * @param {Object} stats - Partial stats (model, provider)
+ * @param {Array} sourceTabs - Array of source tab objects
+ * @param {boolean} includeMedia - Whether images were included
+ * @returns {string} - The created tab ID
+ */
+function createStreamingConversationTab(userMessage, initialAssistantMessage, stats = {}, sourceTabs = [], includeMedia = false) {
+  // Increment conversation counter
+  state.conversationCounter++;
+
+  // Create tab ID
+  const tabId = `conversation_${state.conversationCounter}`;
+
+  // Extract token counts
+  const userTokens = state.pendingConversation?.estimatedTokens || estimateTokenCount(userMessage);
+  const assistantTokens = estimateTokenCount(initialAssistantMessage);
+
+  // Create tab title: first words from user message + ID + token counts
+  const firstWords = getFirstWords(userMessage, 4);
+  const tabTitle = `${firstWords}... [${state.conversationCounter}] (${userTokens}↑ / ...↓)`;
+
+  // Generate HTML for the conversation (with streaming placeholder)
+  const conversationData = {
+    id: state.conversationCounter,
+    userMessage,
+    userTokens,
+    assistantMessage: initialAssistantMessage,
+    assistantTokens,
+    stats: stats,
+    sourceTabs,
+    includeMedia,
+    timestamp: Date.now()
+  };
+
+  const htmlContent = generateConversationHTML(conversationData);
+
+  // Store tab data
+  const tabData = {
+    type: 'conversation',
+    id: state.conversationCounter,
+    title: tabTitle,
+    htmlContent: htmlContent,
+    userMessage,
+    assistantMessage: initialAssistantMessage,
+    userTokens,
+    assistantTokens,
+    stats,
+    sourceTabs,
+    includeMedia,
+    timestamp: Date.now(),
+    streaming: true  // Mark as streaming
+  };
+
+  state.activeTabs.set(tabId, tabData);
+  state.tabLastViewTime.set(tabId, Date.now());
+
+  // Add to tab order
+  state.tabOrder.push(tabId);
+
+  // Render tabs to show the new conversation tab
+  renderTabs();
+
+  return tabId;
+}
+
+/**
+ * Update a streaming conversation tab with new content
+ * @param {string} tabId - The tab ID to update
+ * @param {string} assistantMessage - Updated assistant message
+ * @param {Object} stats - Updated stats
+ */
+function updateStreamingConversationTab(tabId, assistantMessage, stats = {}) {
+  const tab = state.activeTabs.get(tabId);
+  if (!tab || tab.type !== 'conversation') {
+    console.error('Tab not found or not a conversation tab:', tabId);
+    return;
+  }
+
+  // Update assistant message and token count
+  const assistantTokens = estimateTokenCount(assistantMessage);
+
+  // Update tab title with current token counts
+  const firstWords = getFirstWords(tab.userMessage, 4);
+  const streamingIndicator = stats.streaming ? ' 🔄' : '';
+  const tabTitle = `${firstWords}... [${tab.id}] (${tab.userTokens}↑ / ${assistantTokens}↓)${streamingIndicator}`;
+
+  // Update conversation data
+  const conversationData = {
+    id: tab.id,
+    userMessage: tab.userMessage,
+    userTokens: tab.userTokens,
+    assistantMessage,
+    assistantTokens,
+    stats: { ...tab.stats, ...stats },
+    sourceTabs: tab.sourceTabs,
+    includeMedia: tab.includeMedia,
+    timestamp: tab.timestamp
+  };
+
+  const htmlContent = generateConversationHTML(conversationData);
+
+  // Update tab data
+  tab.title = tabTitle;
+  tab.htmlContent = htmlContent;
+  tab.assistantMessage = assistantMessage;
+  tab.assistantTokens = assistantTokens;
+  tab.stats = { ...tab.stats, ...stats };
+  tab.streaming = stats.streaming || false;
+
+  // Re-render tabs to show updated title (with streaming indicator)
+  renderTabs();
+
+  // Clear pending conversation when streaming completes
+  if (!stats.streaming) {
+    state.pendingConversation = null;
+  }
+}
+
+/**
  * Create a new notes tab for editing text
  * @param {string} initialContent - Initial content for the notes (optional)
  * @returns {string} The created tab ID

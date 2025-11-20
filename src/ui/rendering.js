@@ -193,6 +193,8 @@ function generateConversationHTML(conversation) {
   html += '    .source-tab-item .tab-icon { font-size: 12px; }\n';
   html += '    .source-tab-item .tab-title { color: #24292f; font-weight: 500; }\n';
   html += '    .media-badge { display: inline-flex; align-items: center; gap: 4px; background: #ddf4ff; color: #0969da; padding: 4px 8px; border-radius: 12px; font-size: 11px; border: 1px solid #54aeff; margin-left: 10px; }\n';
+  html += '    @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }\n';
+  html += '    .cursor { animation: blink 1s infinite; }\n';
   html += '  </style>\n';
   html += '</head>\n';
   html += '<body>\n';
