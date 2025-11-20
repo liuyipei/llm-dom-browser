@@ -13,6 +13,7 @@ class LLMOrchestrator {
   constructor() {
     this.contentViews = new Map();
     this.tabManager = null;
+    this.windowManager = null;
     this.llmClient = null;
     this.requestHistory = [];
     this.maxHistory = 50;
@@ -31,6 +32,64 @@ class LLMOrchestrator {
    */
   setTabManager(tabManager) {
     this.tabManager = tabManager;
+  }
+
+  /**
+   * Set reference to window manager (called from main.js)
+   */
+  setWindowManager(windowManager) {
+    this.windowManager = windowManager;
+  }
+
+  /**
+   * Retrieve tab data from UI process for tabs that don't have WebContentsView instances
+   * (e.g., notes tabs, conversation tabs)
+   */
+  async _getTabDataFromUI(tabId) {
+    if (!this.windowManager) {
+      console.warn('Window manager not available, cannot retrieve UI tab data');
+      return null;
+    }
+
+    const chatView = this.windowManager.getChatView();
+    if (!chatView || !chatView.webContents) {
+      console.warn('Chat view not available, cannot retrieve UI tab data');
+      return null;
+    }
+
+    try {
+      // Execute JavaScript in the UI process to retrieve tab data
+      const tabData = await chatView.webContents.executeJavaScript(`
+        (function() {
+          // Access the global state object from the UI
+          if (typeof state === 'undefined' || !state.activeTabs) {
+            return null;
+          }
+
+          const tab = state.activeTabs.get('${tabId}');
+          if (!tab) {
+            return null;
+          }
+
+          // Return tab data as a plain object (not a Map)
+          return {
+            type: tab.type,
+            id: tab.id,
+            title: tab.title,
+            htmlContent: tab.htmlContent,
+            userMessage: tab.userMessage,
+            assistantMessage: tab.assistantMessage,
+            content: tab.content,
+            timestamp: tab.timestamp
+          };
+        })();
+      `);
+
+      return tabData;
+    } catch (error) {
+      console.error(`Failed to retrieve tab data from UI for tab ${tabId}:`, error);
+      return null;
+    }
   }
 
   /**
@@ -111,7 +170,42 @@ class LLMOrchestrator {
       try {
         const view = this.contentViews.get(tabId);
         if (!view) {
-          console.warn(`Tab ${tabId} not found`);
+          // Tab not found in contentViews - it might be a notes or conversation tab
+          // Try to retrieve it from the UI process
+          const uiTabData = await this._getTabDataFromUI(tabId);
+
+          if (uiTabData) {
+            // Handle notes and conversation tabs
+            if (uiTabData.type === 'notes') {
+              // Notes tab: extract the text content
+              contextItems.push({
+                tabId,
+                type: 'notes',
+                title: uiTabData.title,
+                url: `notes://${uiTabData.id}`,
+                content: uiTabData.content || ''
+              });
+            } else if (uiTabData.type === 'conversation') {
+              // Conversation tab: include both user message and assistant response
+              const conversationContent = [
+                'USER MESSAGE:',
+                uiTabData.userMessage || '',
+                '',
+                'ASSISTANT RESPONSE:',
+                uiTabData.assistantMessage || ''
+              ].join('\n');
+
+              contextItems.push({
+                tabId,
+                type: 'conversation',
+                title: uiTabData.title,
+                url: `conversation://${uiTabData.id}`,
+                content: conversationContent
+              });
+            }
+          } else {
+            console.warn(`Tab ${tabId} not found in contentViews or UI state`);
+          }
           continue;
         }
 
