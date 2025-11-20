@@ -63,10 +63,11 @@ function extractMediaElements(url) {
  * Avoids DOM objects and returns only serializable data
  * @param {Object} options - Extraction options
  * @param {boolean} options.includeMedia - Whether to extract media elements (images, videos)
+ * @param {boolean} options.fullText - Whether to extract full visible text (no character limits)
  * @returns {Object} Serialized DOM data
  */
 function serializeDOM(options = {}) {
-  const { includeMedia = false } = options;
+  const { includeMedia = false, fullText = false } = options;
 
   // Extract metadata
   const title = document.title || '';
@@ -113,12 +114,13 @@ function serializeDOM(options = {}) {
 
   // Extract main content area if available
   let mainContent = '';
+  const contentLimit = fullText ? Infinity : 50000; // Increased from 2000 to 50000, or unlimited if fullText is true
   const main = document.querySelector('main') || document.querySelector('[role="main"]');
   if (main) {
-    mainContent = main.textContent?.trim().slice(0, 2000) || '';
+    mainContent = main.textContent?.trim().slice(0, contentLimit) || '';
   } else {
     // Fallback: get body text
-    mainContent = document.body?.textContent?.trim().slice(0, 2000) || '';
+    mainContent = document.body?.textContent?.trim().slice(0, contentLimit) || '';
   }
 
   // Extract meta tags for context

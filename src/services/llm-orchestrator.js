@@ -95,7 +95,7 @@ class LLMOrchestrator {
   /**
    * Analyze content from one or more tabs using LLM
    */
-  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+  async analyzeContent(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null, fullText = false) {
     try {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid query');
@@ -112,7 +112,7 @@ class LLMOrchestrator {
       }
 
       // Extract content from all specified tabs
-      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia });
+      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia, fullText });
 
       if (contextItems.length === 0) {
         throw new Error('No content available from specified tabs');
@@ -169,9 +169,10 @@ class LLMOrchestrator {
    * @param {string} model - Model name (may include deployment ID for Fireworks)
    * @param {boolean} includeMedia - Whether to include images in context
    * @param {string} customEndpoint - Custom endpoint for local providers
+   * @param {boolean} fullTextExtraction - Whether to extract full visible text without limits
    * @returns {AsyncGenerator<{type: string, content?: string, metadata?: Object}>}
    */
-  async *analyzeContentStreaming(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null) {
+  async *analyzeContentStreaming(query, tabIds, apiKey, provider = 'openai', model = null, includeMedia = false, customEndpoint = null, fullTextExtraction = false) {
     try {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid query');
@@ -188,7 +189,7 @@ class LLMOrchestrator {
       }
 
       // Extract content from all specified tabs
-      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia });
+      const contextItems = await this._extractContextFromTabs(tabIds, { includeMedia, fullText: fullTextExtraction });
 
       if (contextItems.length === 0) {
         throw new Error('No content available from specified tabs');
@@ -257,7 +258,7 @@ class LLMOrchestrator {
    */
   async _extractContextFromTabs(tabIds, options = {}) {
     const contextItems = [];
-    const { includeMedia = false } = options;
+    const { includeMedia = false, fullText = false } = options;
 
     for (const tabId of tabIds) {
       try {
@@ -335,7 +336,8 @@ class LLMOrchestrator {
           try {
             // Validate options to prevent injection
             const safeOptions = {
-              includeMedia: Boolean(options?.includeMedia)
+              includeMedia: Boolean(options?.includeMedia),
+              fullText: Boolean(options?.fullText)
             };
             const domData = await view.webContents.executeJavaScript(
               `window.contentAPI ? window.contentAPI.getSerializedDOM(${JSON.stringify(safeOptions)}) : null`
@@ -440,7 +442,8 @@ class LLMOrchestrator {
     }
 
     if (dom.paragraphs?.length > 0) {
-      const paragraphs = dom.paragraphs.slice(0, 5).map(p => p.text).join('\n');
+      // Include all extracted paragraphs (up to 100) instead of just 5
+      const paragraphs = dom.paragraphs.map(p => p.text).join('\n');
       parts.push(`\nParagraphs:\n${paragraphs}`);
     }
   }
