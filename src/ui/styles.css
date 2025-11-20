@@ -578,6 +578,16 @@ button:disabled {
   background: transparent;
   z-index: 9999;
   transition: background 0.2s ease;
+  pointer-events: auto;
+}
+
+.resizer:not(:hover):not(.dragging) {
+  pointer-events: none;
+}
+
+.resizer:hover {
+  pointer-events: auto;
+  width: 8px;
 }
 
 .resizer:hover,
