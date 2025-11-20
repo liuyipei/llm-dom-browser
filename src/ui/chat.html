@@ -135,6 +135,9 @@
     <script src="storage.js"></script>
     <script src="ui-init.js"></script>
 
+    <!-- Application state and DOM references (must load first) -->
+    <script src="app-state.js"></script>
+
     <!-- Core application modules -->
     <script src="menu-state.js"></script>
     <script src="rendering.js"></script>
@@ -145,6 +148,8 @@
     <script src="user-actions.js"></script>
     <script src="recently-closed.js"></script>
     <script src="event-listeners.js"></script>
-    <script src="app.js"></script>
+
+    <!-- Application initialization (must load last) -->
+    <script src="app-init.js"></script>
   </body>
 </html>
