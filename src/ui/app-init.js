@@ -21,57 +21,12 @@ async function initialize() {
     console.log(`Restored last selected provider: ${lastProvider}`);
   }
 
-  // Initialize provider-specific UI (this will handle API keys, endpoints, models, etc.)
+  // Initialize provider-specific UI using centralized function
   const provider = providerSelect.value;
   state.currentProvider = provider;
 
-  // Handle local providers
-  const isLocal = window.AppConfig.LOCAL_PROVIDERS.includes(provider);
-  if (isLocal) {
-    // Show endpoint configuration
-    endpointRow.style.display = 'flex';
-    refreshModelsBtn.style.display = 'inline-block';
-
-    // Load saved endpoint
-    const savedEndpoint = storage.getEndpoint(provider);
-    endpointInput.value = savedEndpoint;
-
-    // Show Ollama management if Ollama is selected
-    ollamaManagement.style.display = (provider === 'ollama') ? 'block' : 'none';
-
-    // Make API key optional for local providers
-    apiKeyInput.placeholder = 'API Key (optional for local providers)';
-    apiKeyInput.value = storage.getApiKey(provider);
-
-    // Check health and fetch models
-    await checkProviderHealth();
-    await refreshLocalModels();
-  } else {
-    // Hide local provider UI
-    endpointRow.style.display = 'none';
-    refreshModelsBtn.style.display = 'none';
-    ollamaManagement.style.display = 'none';
-    apiKeyInput.placeholder = 'API Key...';
-
-    // Restore API key for cloud provider (always load to ensure clean state)
-    const savedApiKey = storage.getApiKey(provider);
-    apiKeyInput.value = savedApiKey;
-    if (savedApiKey) {
-      console.log(`Restored API key on init for provider: ${provider}`);
-    }
-  }
-
-  // Show Fireworks deployment field if Fireworks is selected
-  if (provider === 'fireworks') {
-    fireworksDeploymentRow.style.display = 'flex';
-    const savedDeployment = storage.getFireworksDeployment();
-    if (savedDeployment) {
-      fireworksDeploymentInput.value = savedDeployment;
-      console.log(`Restored Fireworks deployment ID: ${savedDeployment}`);
-    }
-  } else {
-    fireworksDeploymentRow.style.display = 'none';
-  }
+  // Load provider settings (handles API keys, endpoints, models, UI elements, etc.)
+  await initializeProviderUI(provider);
 
   // Load persisted tab management data
   const tabData = tabPersistence.load();

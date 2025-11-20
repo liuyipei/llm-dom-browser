@@ -30,75 +30,16 @@ updateSortButtonLabels();
 // Update model select when provider changes
 providerSelect.addEventListener('change', async (e) => {
   const newProvider = e.target.value;
+  const previousProvider = state.currentProvider;
 
-  // Save API key for the PREVIOUS provider before switching
-  if (state.currentProvider) {
-    storage.saveApiKey(state.currentProvider, apiKeyInput.value.trim());
-    console.log(`Saved API key for previous provider: ${state.currentProvider}`);
-    // Save endpoint if previous was local provider
-    if (window.AppConfig.LOCAL_PROVIDERS.includes(state.currentProvider)) {
-      storage.saveEndpoint(state.currentProvider, endpointInput.value.trim());
-    }
-  }
+  // Switch to new provider using centralized function
+  await switchProvider(newProvider, previousProvider);
 
-  // Update current provider
+  // Update current provider in state
   state.currentProvider = newProvider;
 
   // Save the last selected provider for next session
   storage.saveLastSelectedProvider(newProvider);
-
-  // Handle local providers
-  const isLocal = window.AppConfig.LOCAL_PROVIDERS.includes(newProvider);
-  if (isLocal) {
-    // Show endpoint configuration
-    endpointRow.style.display = 'flex';
-    refreshModelsBtn.style.display = 'inline-block';
-
-    // Load saved endpoint or use default
-    const savedEndpoint = storage.getEndpoint(newProvider);
-    endpointInput.value = savedEndpoint;
-
-    // Show Ollama management if Ollama is selected
-    ollamaManagement.style.display = (newProvider === 'ollama') ? 'block' : 'none';
-
-    // Make API key optional for local providers
-    apiKeyInput.placeholder = 'API Key (optional for local providers)';
-    apiKeyInput.value = storage.getApiKey(newProvider);
-
-    // Check health automatically
-    await checkProviderHealth();
-
-    // Fetch local models automatically
-    await refreshLocalModels();
-  } else {
-    // Hide local provider UI
-    endpointRow.style.display = 'none';
-    refreshModelsBtn.style.display = 'none';
-    ollamaManagement.style.display = 'none';
-
-    // Restore API key requirement
-    apiKeyInput.placeholder = 'API Key...';
-
-    // Load saved API key for new provider (always load to clear any stale local provider values)
-    const savedApiKey = storage.getApiKey(newProvider);
-    apiKeyInput.value = savedApiKey;
-    if (savedApiKey) {
-      console.log(`Restored API key for provider: ${newProvider}`);
-    }
-  }
-
-  // Show/hide Fireworks deployment field
-  if (newProvider === 'fireworks') {
-    fireworksDeploymentRow.style.display = 'flex';
-    const savedDeployment = storage.getFireworksDeployment();
-    if (savedDeployment) {
-      fireworksDeploymentInput.value = savedDeployment;
-    }
-  } else {
-    fireworksDeploymentRow.style.display = 'none';
-  }
-
-  updateModelSelect();
 });
 
 // Handle model selection - fetch dynamic models if needed
