@@ -8,7 +8,8 @@ menuButton.addEventListener('click', () => menuState.toggle());
 bookmarksToggle.addEventListener('click', () => bookmarksState.toggle());
 openBtn.addEventListener('click', handleOpenTab);
 uploadBtn.addEventListener('click', handleUploadFile);
-sendBtn.addEventListener('click', handleSendQuery);
+// TEMPORARY: Using streaming version for testing
+sendBtn.addEventListener('click', handleSendQueryStreaming);
 checkHealthBtn.addEventListener('click', checkProviderHealth);
 refreshModelsBtn.addEventListener('click', refreshLocalModels);
 ollamaPullBtn.addEventListener('click', pullOllamaModel);
@@ -114,7 +115,8 @@ urlInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleOpenTab();
 });
 queryInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') handleSendQuery();
+  // TEMPORARY: Using streaming version for testing
+  if (e.key === 'Enter') handleSendQueryStreaming();
 });
 ollamaPullInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') pullOllamaModel();

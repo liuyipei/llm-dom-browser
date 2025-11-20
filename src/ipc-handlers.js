@@ -135,10 +135,68 @@ class IPCHandlers {
    * Register LLM-related IPC handlers
    */
   registerLLMHandlers() {
-    // Handle IPC: Send query to LLM with context
+    // Handle IPC: Send query to LLM with context (non-streaming)
     ipcMain.handle('query-llm', handleAsyncError(async (event, { query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
       return await this.llmOrchestrator.analyzeContent(query, tabIds, apiKey, provider, model, includeMedia, customEndpoint);
     }));
+
+    // Handle IPC: Start streaming LLM query
+    ipcMain.on('start-llm-stream', async (event, { requestId, query, tabIds, apiKey, provider, model, includeMedia, customEndpoint }) => {
+      try {
+        console.log(`[IPC] Starting stream ${requestId} with provider ${provider}, model ${model}`);
+
+        // Stream the response
+        const stream = this.llmOrchestrator.analyzeContentStreaming(
+          query, tabIds, apiKey, provider, model, includeMedia, customEndpoint
+        );
+
+        for await (const item of stream) {
+          if (item.type === 'chunk') {
+            // Send text chunk to renderer
+            event.sender.send('llm-stream-chunk', {
+              requestId,
+              content: item.content
+            });
+          } else if (item.type === 'complete') {
+            // Send completion with metadata
+            event.sender.send('llm-stream-complete', {
+              requestId,
+              metadata: item.metadata
+            });
+          } else if (item.type === 'error') {
+            // Send error
+            event.sender.send('llm-stream-error', {
+              requestId,
+              error: item.error
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`[IPC] Stream ${requestId} error:`, error);
+        event.sender.send('llm-stream-error', {
+          requestId,
+          error: {
+            message: error.message,
+            code: error.code || 'IPC_STREAM_ERROR'
+          }
+        });
+      }
+    });
+
+    // Handle IPC: Cancel streaming LLM query
+    // Note: Currently providers don't support cancellation via AbortController
+    // This is a placeholder for future implementation
+    ipcMain.on('cancel-llm-stream', (event, { requestId }) => {
+      console.log(`[IPC] Cancel stream requested for ${requestId}`);
+      // TODO: Implement cancellation with AbortController
+      event.sender.send('llm-stream-error', {
+        requestId,
+        error: {
+          message: 'Stream cancelled by user',
+          code: 'CANCELLED'
+        }
+      });
+    });
   }
 
   /**

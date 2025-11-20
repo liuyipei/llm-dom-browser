@@ -210,3 +210,203 @@ async function handleSendQuery() {
     setLoading(false);
   }
 }
+
+/**
+ * Send streaming query to LLM with live UI updates
+ */
+async function handleSendQueryStreaming() {
+  const query = queryInput.value.trim();
+  const apiKey = apiKeyInput.value.trim();
+  const provider = providerSelect.value;
+  let model = modelSelect.value || null;
+  const tabIds = Array.from(state.selectedTabs);
+  const includeMedia = includeMediaCheckbox.checked;
+  const isLocal = window.AppConfig.LOCAL_PROVIDERS.includes(provider);
+  const customEndpoint = isLocal ? endpointInput.value.trim() : null;
+
+  // For Fireworks, append deployment ID if provided
+  if (provider === 'fireworks') {
+    const deploymentId = fireworksDeploymentInput.value.trim();
+    if (deploymentId && model) {
+      model = `${model}#${deploymentId}`;
+      console.log(`Using Fireworks deployment: ${model}`);
+    }
+  }
+
+  if (!query) {
+    updateStatus('Please enter a question', 'error');
+    return;
+  }
+
+  // API key is optional for local providers
+  if (!isLocal && !apiKey) {
+    updateStatus('Please enter API key', 'error');
+    return;
+  }
+
+  if (tabIds.length === 0) {
+    updateStatus('Please select at least one tab', 'error');
+    return;
+  }
+
+  // Save API key and endpoint if applicable
+  if (apiKey) {
+    storage.saveApiKey(provider, apiKey);
+  }
+  if (isLocal && customEndpoint) {
+    storage.saveEndpoint(provider, customEndpoint);
+  }
+
+  try {
+    setLoading(true);
+    updateStatus(`Streaming response from ${provider}...`);
+
+    // Store user message for tab creation
+    state.pendingConversation = {
+      userMessage: query,
+      estimatedTokens: estimateTokenCount(query),
+      timestamp: Date.now()
+    };
+
+    // Collect source tab information
+    const sourceTabs = tabIds.map(id => {
+      const tab = state.activeTabs.get(id);
+      return {
+        id: id,
+        title: tab ? tab.title : 'Unknown Tab',
+        url: tab ? tab.url : ''
+      };
+    });
+
+    // Create conversation tab immediately with loading state
+    const conversationTabId = createStreamingConversationTab(
+      query,
+      '⏳ Waiting for response...',
+      { model, provider },
+      sourceTabs,
+      includeMedia
+    );
+
+    // Generate unique request ID
+    const requestId = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[Stream] Request ${requestId} started`);
+
+    // Streaming state
+    let streamedText = '';
+    let chunkCount = 0;
+    const startTime = Date.now();
+    let lastRenderTime = 0;
+    const RENDER_DEBOUNCE_MS = 80; // Render at most every 80ms
+
+    // Debounced update function
+    const updateTabContent = () => {
+      const now = Date.now();
+      if (now - lastRenderTime >= RENDER_DEBOUNCE_MS) {
+        updateStreamingConversationTab(
+          conversationTabId,
+          streamedText + ' ▌', // Add blinking cursor
+          { model, provider, streaming: true, chunkCount }
+        );
+        lastRenderTime = now;
+      }
+    };
+
+    // Set up event listeners
+    const unsubChunk = window.electronAPI.onLLMStreamChunk((data) => {
+      if (data.requestId === requestId) {
+        chunkCount++;
+        streamedText += data.content;
+        updateTabContent();
+      }
+    });
+
+    const unsubComplete = window.electronAPI.onLLMStreamComplete((data) => {
+      if (data.requestId === requestId) {
+        const elapsed = Date.now() - startTime;
+        console.log(`[Stream] Complete: ${chunkCount} chunks in ${elapsed}ms`);
+
+        // Final update without cursor
+        updateStreamingConversationTab(
+          conversationTabId,
+          streamedText,
+          {
+            model: data.metadata.model || model,
+            provider: data.metadata.provider || provider,
+            latencyMs: data.metadata.latencyMs || elapsed,
+            tokensUsed: data.metadata.tokensUsed,
+            streaming: false,
+            chunkCount
+          }
+        );
+
+        // Add conversation summary to chat
+        const tab = state.activeTabs.get(conversationTabId);
+        addConversationToChat(
+          conversationTabId,
+          tab.id,
+          tab.userTokens,
+          tab.assistantTokens,
+          {
+            latencyMs: data.metadata.latencyMs,
+            usage: {},
+            model: data.metadata.model
+          }
+        );
+
+        updateStatus(`Response complete: ${chunkCount} chunks in ${(elapsed/1000).toFixed(1)}s`, 'success');
+
+        // Clean up
+        unsubChunk();
+        unsubComplete();
+        unsubError();
+        setLoading(false);
+        queryInput.value = '';
+      }
+    });
+
+    const unsubError = window.electronAPI.onLLMStreamError((data) => {
+      if (data.requestId === requestId) {
+        console.error(`[Stream] Error:`, data.error);
+
+        // Update tab with error message
+        const errorMessage = streamedText
+          ? streamedText + `\n\n---\n❌ **Error:** ${data.error.message}`
+          : `❌ **Error:** ${data.error.message}`;
+
+        updateStreamingConversationTab(
+          conversationTabId,
+          errorMessage,
+          { model, provider, streaming: false, error: true }
+        );
+
+        updateStatus(`Error: ${data.error.message}`, 'error');
+        addMessage(`❌ ${data.error.message}`, 'error');
+
+        // Clean up
+        unsubChunk();
+        unsubComplete();
+        unsubError();
+        setLoading(false);
+      }
+    });
+
+    // Start the stream
+    window.electronAPI.startLLMStream(
+      requestId,
+      query,
+      tabIds,
+      apiKey,
+      provider,
+      model,
+      includeMedia,
+      customEndpoint
+    );
+
+  } catch (error) {
+    console.error(`[Stream] Exception:`, error);
+    updateStatus(`Error: ${error.message}`, 'error');
+    addMessage(`❌ ${error.message}`, 'error');
+    setLoading(false);
+    state.pendingConversation = null;
+  }
+}
